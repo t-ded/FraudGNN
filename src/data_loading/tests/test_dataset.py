@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from typing import Any
+from typing import cast
 
 from src.base.build_test_dataset import TEST_DATASET_ALL_COLUMNS, TEST_DATASET_NUMERIC_COLUMNS, TEST_DATASET_CATEGORICAL_COLUMNS, TEST_DATASET_TEXT_COLUMNS, TEST_DATASET_SOURCE_DATA
 from src.data_loading.tabular_dataset import TabularDataset
@@ -22,7 +22,7 @@ class TestTabularDataset:
             numeric_columns=[], categorical_columns=[], text_columns=[],
             required_columns=TEST_DATASET_ALL_COLUMNS,
         )
-        assert tabular_dataset.df.shape == (len(TEST_DATASET_ALL_COLUMNS), TEST_DATASET_SOURCE_DATA['test_id'][-1])
+        assert tabular_dataset.df.shape == (len(TEST_DATASET_ALL_COLUMNS), cast(list, TEST_DATASET_SOURCE_DATA['test_id'])[-1])
 
     def test_data_loading_with_categories(self) -> None:
         tabular_dataset = TabularDataset(
