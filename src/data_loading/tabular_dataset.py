@@ -4,7 +4,7 @@ import polars as pl
 from polars._typing import IntoExpr
 
 
-class Dataset:
+class TabularDataset:
 
     def __init__(self, data_path: str, numeric_columns: list[str], categorical_columns: list[str], text_columns: list[str], required_columns: list[str]) -> None:
 
