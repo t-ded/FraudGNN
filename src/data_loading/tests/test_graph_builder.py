@@ -22,11 +22,13 @@ with open(CONFIG_PATH) as f:
 class TestGraphDataset:
 
     _data_path = ROOT_DIR / config['test_data_path'] / 'minimal_sample.csv'
-    _dataset = TabularDataset(
-        data_path=_data_path,
-        numeric_columns=[], categorical_columns=[], text_columns=[],
-        required_columns=TEST_DATASET_ALL_COLUMNS,
-    )
+
+    def setup_method(self) -> None:
+        self._dataset = TabularDataset(
+            data_path=self._data_path,
+            numeric_columns=[], categorical_columns=[], text_columns=[],
+            required_columns=TEST_DATASET_ALL_COLUMNS,
+        )
 
     def test_check_matching_definitions_fails_on_missing_nodes(self) -> None:
         with pytest.raises(AssertionError, match=r"Edge \('customer', 'makes', 'transaction'\) does not have its source column test_customer amongst node definition columns."):
@@ -146,3 +148,25 @@ class TestGraphDataset:
 
         assert graph_dataset.graph is not None
         np.testing.assert_array_equal(graph_dataset.graph.ndata['label']['transaction'].flatten(), labels)
+
+    def test_graph_update_connections(self) -> None:
+        graph_dataset = GraphDataset(
+            source_tabular_dataset=self._dataset,
+            node_feature_cols={'test_id': [], 'test_customer': [], 'test_counterparty': []},
+            node_label_cols={},
+            edge_definitions={
+                ('customer', 'sends', 'transaction'): ('test_customer', 'test_id'),
+                ('transaction', 'sent_to', 'counterparty'): ('test_id', 'test_counterparty'),
+            },
+        )
+        graph_dataset.build_graph()
+
+        incr = pl.DataFrame({'test_id': [6, 7, 8], 'test_customer': ['B', 'C', 'F'], 'test_counterparty': ['ddd', 'eee', 'aaa']})
+        graph_dataset.update_graph(incr)
+
+        test_graph = graph_dataset.graph
+
+        assert test_graph is not None
+        assert test_graph.num_nodes() == 19
+        np.testing.assert_array_equal(test_graph.edges(etype='sends'), (torch.tensor([0, 1, 2, 3, 4, 1, 2, 5]), torch.tensor([0, 1, 2, 3, 4, 5, 6, 7])))
+        np.testing.assert_array_equal(test_graph.edges(etype='sent_to'), (torch.tensor([0, 1, 2, 3, 4, 5, 6, 7]), torch.tensor([0, 1, 2, 3, 4, 3, 4, 0])))
