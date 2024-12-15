@@ -1,3 +1,4 @@
 {
-  "data_folder": "data/"
+  "data_path": "data",
+  "test_data_path": "data/test_data"
 }
