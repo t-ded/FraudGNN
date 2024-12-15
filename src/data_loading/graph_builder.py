@@ -3,6 +3,7 @@ from typing import Optional, Any, cast, Iterator
 
 import dgl
 import polars as pl
+from dgl import DGLGraph
 
 from src.data_loading.tabular_dataset import TabularDataset
 
@@ -11,10 +12,17 @@ logger = logging.getLogger(__name__)
 
 class GraphDataset:
 
-    def __init__(self, source_tabular_dataset: TabularDataset, node_feature_cols: dict[str, list[str]], edge_definitions: dict[tuple[str, str, str], tuple[str, str]]) -> None:
+    def __init__(
+            self,
+            source_tabular_dataset: TabularDataset,
+            node_feature_cols: dict[str, list[str]],
+            node_label_cols: dict[str, str],
+            edge_definitions: dict[tuple[str, str, str], tuple[str, str]],
+    ) -> None:
         self._tabular_dataset = source_tabular_dataset
         self._node_defining_cols = list(node_feature_cols.keys())
         self._node_feature_cols = node_feature_cols
+        self._node_label_cols = node_label_cols
         self._edge_definitions = edge_definitions
 
         self._node_type_to_column_name_mapping: dict[str, str] = {}
@@ -91,6 +99,9 @@ class GraphDataset:
             }
         )
 
+        self._enrich_with_features()
+        self._enrich_with_labels()
+
     def _assign_node_ids(self) -> None:
         self._tabular_dataset.with_columns(pl.int_range(0, pl.len()).alias('row_index'))
         for node_type, node_defining_col in self._node_type_to_column_name_mapping.items():
@@ -99,3 +110,19 @@ class GraphDataset:
                 self._tabular_dataset.ldf.select(node_defining_col, pl.col('row_index').first().over(node_defining_col)).collect().iter_rows()
             ))
             self._tabular_dataset.with_columns(pl.col(node_defining_col).replace_strict(self._value_node_id_mapping[node_type]))
+
+    def _enrich_with_features(self) -> None:
+        assert isinstance(self._graph, DGLGraph), 'Can only enrich with features after graph has been initialized.'
+        for node_col, node_feature_cols in self._node_feature_cols.items():
+            for feature_col in node_feature_cols:
+                node_type = self._column_name_to_node_type_mapping[node_col]
+                self._graph.nodes[node_type].data[feature_col] = self._tabular_dataset.ldf.select(feature_col).collect().to_torch()
+
+    def _enrich_with_labels(self) -> None:
+        assert isinstance(self._graph, DGLGraph), 'Can only enrich with labels after graph has been initialized.'
+        for node_col, label_col in self._node_label_cols.items():
+            node_type = self._column_name_to_node_type_mapping[node_col]
+            self._graph.nodes[node_type].data[label_col] = self._tabular_dataset.ldf.select(label_col).collect().to_torch().long()
+
+    def get_homogeneous(self, store_type: bool = True) -> dgl.DGLGraph:
+        return dgl.to_homogeneous(self._graph, store_type=store_type)
