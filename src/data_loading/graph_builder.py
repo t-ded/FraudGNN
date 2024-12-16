@@ -141,20 +141,27 @@ class GraphDataset:
                     max_id += 1
             self._value_node_id_mapping[node_type].update(new_id_mapping)
             incr = incr.with_columns(pl.col(node_defining_col).replace_strict(self._value_node_id_mapping[node_type]))
+            incr_new = incr.filter(pl.col(node_defining_col).is_in(new_id_mapping.values()))
+            incr_old = incr.filter(~pl.col(node_defining_col).is_in(new_id_mapping.values()))
 
-            node_type_update_data: dict[str, torch.Tensor] = {}
+            old_nodes_ids = incr_old.select(node_defining_col).to_torch()
+            new_nodes_data: dict[str, torch.Tensor] = {}
 
             for feature_col in self._node_feature_cols[node_defining_col]:
-                node_type_update_data[feature_col] = incr.select(feature_col).to_torch()
+                if len(old_nodes_ids) > 0:
+                    self._graph.nodes[node_type].data[feature_col][old_nodes_ids] = incr_old.select(feature_col).to_torch()
+                new_nodes_data[feature_col] = incr_new.select(feature_col).to_torch()
 
             label_col = self._node_label_cols.get(node_defining_col)
             if label_col is not None:
-                node_type_update_data[label_col] = incr.select(label_col).to_torch()
+                if len(old_nodes_ids) > 0:
+                    self._graph.nodes[node_type].data[label_col][old_nodes_ids] = incr_old.select(label_col).to_torch()
+                new_nodes_data[label_col] = incr_new.select(label_col).to_torch()
 
             if new_id_mapping:
                 self._graph.add_nodes(
                     num=len(new_id_mapping),
-                    data=node_type_update_data if node_type_update_data else None,
+                    data=new_nodes_data if new_nodes_data else None,
                     ntype=node_type,
                 )
 
