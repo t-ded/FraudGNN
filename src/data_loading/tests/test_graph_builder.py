@@ -85,25 +85,6 @@ class TestGraphDataset:
         np.testing.assert_array_equal(test_graph.edges(etype='sends'), (torch.tensor([0, 1, 2, 3, 4]), torch.tensor([0, 1, 2, 3, 4])))
         np.testing.assert_array_equal(test_graph.edges(etype='sent_to'), (torch.tensor([0, 1, 2, 3, 4]), torch.tensor([0, 1, 2, 3, 4])))
 
-    def test_conversion_to_homogeneous(self) -> None:
-        graph_dataset = GraphDataset(
-            source_tabular_dataset=self._dataset,
-            node_feature_cols={'test_id': [], 'test_customer': [], 'test_counterparty': []},
-            node_label_cols={},
-            edge_definitions={
-                ('customer', 'sends', 'transaction'): ('test_customer', 'test_id'),
-                ('transaction', 'sent_to', 'counterparty'): ('test_id', 'test_counterparty'),
-            },
-        )
-        graph_dataset.build_graph()
-
-        test_homogeneous_graph = graph_dataset.get_homogeneous(store_type=False)
-
-        assert test_homogeneous_graph is not None
-        assert test_homogeneous_graph.num_nodes() == 15
-        np.testing.assert_array_equal(test_homogeneous_graph.ndata['_ID'], torch.tensor([0, 1, 2, 3, 4, 0, 1, 2, 3, 4, 0, 1, 2, 3, 4]))
-        np.testing.assert_array_equal(test_homogeneous_graph.edata['_ID'], torch.tensor([0, 1, 2, 3, 4, 0, 1, 2, 3, 4]))
-
     def test_basic_features_for_each_node_type(self) -> None:
         rnd_feature = np.random.rand(self._dataset.df.height)
         self._dataset.with_columns(
@@ -286,3 +267,30 @@ class TestGraphDataset:
 
         assert graph_dataset.graph is not None
         np.testing.assert_array_equal(graph_dataset.graph.ndata['label']['transaction'].flatten(), [1, 0, 0, 0, 0])
+
+    def test_conversion_to_homogeneous(self) -> None:
+        labels = np.zeros(self._dataset.df.height)
+        rnd_feature = np.random.rand(self._dataset.df.height)
+        self._dataset.with_columns(
+            pl.col('test_category').str.len_chars().alias('category_len'),
+            pl.lit(rnd_feature).alias('random_feature'),
+            pl.lit(labels).alias('label'),
+        )
+
+        graph_dataset = GraphDataset(
+            source_tabular_dataset=self._dataset,
+            node_feature_cols={'test_id': ['test_amount'], 'test_customer': ['category_len'], 'test_counterparty': ['random_feature']},
+            node_label_cols={'test_id': 'label'},
+            edge_definitions={
+                ('customer', 'sends', 'transaction'): ('test_customer', 'test_id'),
+                ('transaction', 'sent_to', 'counterparty'): ('test_id', 'test_counterparty'),
+            },
+        )
+        graph_dataset.build_graph()
+
+        test_homogeneous_graph = graph_dataset.get_homogeneous(store_type=False)
+
+        assert test_homogeneous_graph is not None
+        assert test_homogeneous_graph.num_nodes() == 15
+        np.testing.assert_array_equal(test_homogeneous_graph.ndata['_ID'], torch.tensor([0, 1, 2, 3, 4, 0, 1, 2, 3, 4, 0, 1, 2, 3, 4]))
+        np.testing.assert_array_equal(test_homogeneous_graph.edata['_ID'], torch.tensor([0, 1, 2, 3, 4, 0, 1, 2, 3, 4]))

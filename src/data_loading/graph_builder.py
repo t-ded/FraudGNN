@@ -1,3 +1,4 @@
+import itertools
 import logging
 from typing import Optional, Any, cast, Iterator
 
@@ -172,4 +173,25 @@ class GraphDataset:
             )
 
     def get_homogeneous(self, store_type: bool = True) -> dgl.DGLGraph:
-        return dgl.to_homogeneous(self._graph, store_type=store_type)
+        assert isinstance(self._graph, DGLGraph), 'Can only convert graph to homogeneous after graph has been initialized.'
+
+        homo_g = dgl.to_homogeneous(self._graph, store_type=store_type)
+
+        num_all_feature_cols = sum(len(feature_cols) for feature_cols in self._node_feature_cols.values())
+        homogeneous_features = torch.zeros((homo_g.num_nodes(), num_all_feature_cols))
+
+        node_idx = 0
+        feature_idx = 0
+        for ntype in self._graph.ntypes:
+
+            ntype_col = self._node_type_to_column_name_mapping[ntype]
+            ntype_num_nodes = self._graph.num_nodes(ntype)
+
+            for feature_col in self._node_feature_cols[ntype_col]:
+                homogeneous_features[node_idx: node_idx + ntype_num_nodes, feature_idx] = self._graph.nodes[ntype].data[feature_col].squeeze(1)
+                feature_idx += 1
+
+            node_idx += ntype_num_nodes
+
+        homo_g.ndata['features'] = homogeneous_features
+        return homo_g
