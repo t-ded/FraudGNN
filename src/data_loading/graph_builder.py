@@ -1,4 +1,3 @@
-import itertools
 import logging
 from typing import Optional, Any, cast, Iterator
 
@@ -178,20 +177,29 @@ class GraphDataset:
         homo_g = dgl.to_homogeneous(self._graph, store_type=store_type)
 
         num_all_feature_cols = sum(len(feature_cols) for feature_cols in self._node_feature_cols.values())
-        homogeneous_features = torch.zeros((homo_g.num_nodes(), num_all_feature_cols))
+        num_nodes = homo_g.num_nodes()
+        homogeneous_features = torch.zeros((num_nodes, num_all_feature_cols))
+        homogeneous_labels = torch.zeros(num_nodes)
 
         node_idx = 0
         feature_idx = 0
+        label_node_idx = 0
         for ntype in self._graph.ntypes:
 
             ntype_col = self._node_type_to_column_name_mapping[ntype]
             ntype_num_nodes = self._graph.num_nodes(ntype)
 
             for feature_col in self._node_feature_cols[ntype_col]:
-                homogeneous_features[node_idx: node_idx + ntype_num_nodes, feature_idx] = self._graph.nodes[ntype].data[feature_col].squeeze(1)
+                homogeneous_features[node_idx : node_idx + ntype_num_nodes, feature_idx] = self._graph.nodes[ntype].data[feature_col].squeeze(1)
                 feature_idx += 1
 
+            label_col = self._node_label_cols.get(ntype_col)
+            if label_col is not None:
+                homogeneous_labels[label_node_idx : label_node_idx + ntype_num_nodes] = self._graph.nodes[ntype].data[label_col].squeeze(1)
+
             node_idx += ntype_num_nodes
+            label_node_idx += ntype_num_nodes
 
         homo_g.ndata['features'] = homogeneous_features
+        homo_g.ndata['label'] = homogeneous_labels
         return homo_g
