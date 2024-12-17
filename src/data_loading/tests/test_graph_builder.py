@@ -269,7 +269,7 @@ class TestGraphDataset:
         np.testing.assert_array_equal(graph_dataset.graph.ndata['label']['transaction'].flatten(), [1, 0, 0, 0, 0])
 
     def test_conversion_to_homogeneous(self) -> None:
-        labels = np.zeros(self._dataset.df.height)
+        labels = np.ones(self._dataset.df.height)
         rnd_feature = np.random.rand(self._dataset.df.height)
         self._dataset.with_columns(
             pl.col('test_category').str.len_chars().alias('category_len'),
@@ -293,9 +293,12 @@ class TestGraphDataset:
         expected_features[0 : 5, 0] = torch.tensor(rnd_feature)
         expected_features[5 : 10, 1] = torch.tensor([5, 5, 5, 5, 5])
         expected_features[10 : 15, 2] = torch.tensor([100, 200, 300, 400, 500])
+        expected_labels = torch.zeros(15)
+        expected_labels[10 : 15] = torch.tensor([1, 1, 1, 1, 1])
 
         assert test_homogeneous_graph is not None
         assert test_homogeneous_graph.num_nodes() == 15
         np.testing.assert_array_equal(test_homogeneous_graph.ndata['_ID'], torch.tensor([0, 1, 2, 3, 4, 0, 1, 2, 3, 4, 0, 1, 2, 3, 4]))
         np.testing.assert_array_equal(test_homogeneous_graph.edata['_ID'], torch.tensor([0, 1, 2, 3, 4, 0, 1, 2, 3, 4]))
         np.testing.assert_array_equal(test_homogeneous_graph.ndata['features'], expected_features)
+        np.testing.assert_array_equal(test_homogeneous_graph.ndata['label'], expected_labels)
