@@ -289,8 +289,13 @@ class TestGraphDataset:
         graph_dataset.build_graph()
 
         test_homogeneous_graph = graph_dataset.get_homogeneous(store_type=False)
+        expected_features = torch.zeros((15, 3))
+        expected_features[0 : 5, 0] = torch.tensor(rnd_feature)
+        expected_features[5 : 10, 1] = torch.tensor([5, 5, 5, 5, 5])
+        expected_features[10 : 15, 2] = torch.tensor([100, 200, 300, 400, 500])
 
         assert test_homogeneous_graph is not None
         assert test_homogeneous_graph.num_nodes() == 15
         np.testing.assert_array_equal(test_homogeneous_graph.ndata['_ID'], torch.tensor([0, 1, 2, 3, 4, 0, 1, 2, 3, 4, 0, 1, 2, 3, 4]))
         np.testing.assert_array_equal(test_homogeneous_graph.edata['_ID'], torch.tensor([0, 1, 2, 3, 4, 0, 1, 2, 3, 4]))
+        np.testing.assert_array_equal(test_homogeneous_graph.ndata['features'], expected_features)
