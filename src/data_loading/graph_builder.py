@@ -127,35 +127,15 @@ class GraphDataset:
         assert isinstance(self._graph, DGLGraph), 'Can only update graph after graph has been initialized.'
 
         for node_type, node_defining_col in self._node_type_to_column_name_mapping.items():
+            incr = self._assign_node_ids_incr(incr.lazy(), node_type, node_defining_col).collect()
+            new_id_mapping = dict(cast(
+                Iterator[tuple[Any, int]],
+                incr.filter((pl.col('is_new_node_mask'))).select('cached_col', node_defining_col).iter_rows()
+            ))
 
-            existing_ids = self._value_node_id_mapping[node_type]
-            max_id = max(existing_ids.values(), default=-1) + 1
-
-            new_values = incr.select(pl.col(node_defining_col)).unique(keep='first', maintain_order=True).to_series()
-            new_id_mapping = {}
-            for value in new_values:
-                if value not in existing_ids:
-                    new_id_mapping[value] = max_id
-                    max_id += 1
             self._value_node_id_mapping[node_type].update(new_id_mapping)
-            incr = incr.with_columns(pl.col(node_defining_col).replace_strict(self._value_node_id_mapping[node_type]))
-            incr_new = incr.filter(pl.col(node_defining_col).is_in(new_id_mapping.values()))
-            incr_old = incr.filter(~pl.col(node_defining_col).is_in(new_id_mapping.values()))
 
-            old_nodes_ids = incr_old.select(node_defining_col).to_torch()
-            new_nodes_data: dict[str, torch.Tensor] = {}
-
-            for feature_col in self._node_feature_cols[node_defining_col]:
-                if len(old_nodes_ids) > 0:
-                    self._graph.nodes[node_type].data[feature_col][old_nodes_ids] = incr_old.select(feature_col).to_torch()
-                new_nodes_data[feature_col] = incr_new.select(feature_col).to_torch()
-
-            label_col = self._node_label_cols.get(node_defining_col)
-            if label_col is not None:
-                if len(old_nodes_ids) > 0:
-                    self._graph.nodes[node_type].data[label_col][old_nodes_ids] = incr_old.select(label_col).to_torch()
-                new_nodes_data[label_col] = incr_new.select(label_col).to_torch()
-
+            new_nodes_data = self._get_new_data_update_old_data(node_type, node_defining_col, incr)
             if new_id_mapping:
                 self._graph.add_nodes(
                     num=len(new_id_mapping),
@@ -163,11 +143,63 @@ class GraphDataset:
                     ntype=node_type,
                 )
 
-        for edge_description, edge_definition in self._edge_definitions.items():
-            self._graph.add_edges(
-                *tuple(incr.select(edge_definition).to_numpy(writable=True).T),
-                etype=edge_description[1],
+        self._update_edges_from_incr(incr)
+
+    def _assign_node_ids_incr(self, incr_lazy: pl.LazyFrame, node_type: str, node_defining_col: str) -> pl.LazyFrame:
+        max_id = max(self._value_node_id_mapping[node_type].values(), default=-1) + 1
+        return (
+            incr_lazy
+            .with_columns(
+                pl.col(node_defining_col).alias('cached_col'),
+                pl.col(node_defining_col).replace_strict(self._value_node_id_mapping[node_type], default=None)
             )
+            .with_columns(
+                pl.col(node_defining_col).is_null().alias('is_new_node_mask'),
+            )
+            .with_columns(
+                pl.int_range(max_id, pl.len() + max_id).over('is_new_node_mask').alias('new_idx')
+            )
+            .with_columns(
+                pl.col(node_defining_col).fill_null(pl.col('new_idx').first().over('cached_col'))
+            )
+        )
+
+    def _get_new_data_update_old_data(self, node_type: str, node_defining_col: str, incr: pl.DataFrame) -> dict[str, torch.Tensor]:
+        assert isinstance(self._graph, DGLGraph), 'Can only update graph after graph has been initialized.'
+
+        incr_new = incr.filter(pl.col('is_new_node_mask'))
+        incr_old = incr.filter(~pl.col('is_new_node_mask'))
+
+        old_nodes_ids = incr_old.select(node_defining_col).to_torch()
+        new_nodes_data: dict[str, torch.Tensor] = {}
+        label_col = self._node_label_cols.get(node_defining_col)
+
+        if len(old_nodes_ids) > 0:
+
+            for feature_col in self._node_feature_cols[node_defining_col]:
+                self._graph.nodes[node_type].data[feature_col][old_nodes_ids] = incr_old.select(feature_col).to_torch()
+                new_nodes_data[feature_col] = incr_new.select(feature_col).to_torch()
+
+            if label_col is not None:
+                self._graph.nodes[node_type].data[label_col][old_nodes_ids] = incr_old.select(label_col).to_torch()
+                new_nodes_data[label_col] = incr_new.select(label_col).to_torch()
+
+        else:
+
+            for feature_col in self._node_feature_cols[node_defining_col]:
+                new_nodes_data[feature_col] = incr_new.select(feature_col).to_torch()
+
+            if label_col is not None:
+                new_nodes_data[label_col] = incr_new.select(label_col).to_torch()
+
+        return new_nodes_data
+
+    def _update_edges_from_incr(self, incr: pl.DataFrame) -> None:
+        assert isinstance(self._graph, DGLGraph), 'Can only update graph after graph has been initialized.'
+
+        for edge_description, edge_definition in self._edge_definitions.items():
+            edge_src_dst = incr.select(edge_definition).to_numpy(writable=True).T
+            self._graph.add_edges(*edge_src_dst, etype=edge_description[1])
 
     def get_homogeneous(self, store_type: bool = True) -> dgl.DGLGraph:
         assert isinstance(self._graph, DGLGraph), 'Can only convert graph to homogeneous after graph has been initialized.'
