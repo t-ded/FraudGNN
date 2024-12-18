@@ -1,4 +1,5 @@
 import logging
+from dataclasses import dataclass
 from typing import Optional, Any, cast, Iterator
 
 import dgl
@@ -11,18 +12,21 @@ from src.data_loading.tabular_dataset import TabularDataset
 logger = logging.getLogger(__name__)
 
 
+@dataclass
+class GraphDatasetDefinition:
+    node_feature_cols: dict[str, list[str]]
+    node_label_cols: dict[str, str]
+    edge_definitions: dict[tuple[str, str, str], tuple[str, str]]
+    batch_size: int
+
+
 class GraphDataset:
 
-    def __init__(
-            self,
-            node_feature_cols: dict[str, list[str]],
-            node_label_cols: dict[str, str],
-            edge_definitions: dict[tuple[str, str, str], tuple[str, str]],
-    ) -> None:
-        self._node_defining_cols = list(node_feature_cols.keys())
-        self._node_feature_cols = node_feature_cols
-        self._node_label_cols = node_label_cols
-        self._edge_definitions = edge_definitions
+    def __init__(self, graph_dataset_definition: GraphDatasetDefinition) -> None:
+        self._node_defining_cols = list(graph_dataset_definition.node_feature_cols.keys())
+        self._node_feature_cols = graph_dataset_definition.node_feature_cols
+        self._node_label_cols = graph_dataset_definition.node_label_cols
+        self._edge_definitions = graph_dataset_definition.edge_definitions
 
         self._node_type_to_column_name_mapping: dict[str, str] = {}
         self._column_name_to_node_type_mapping: dict[str, str] = {}
