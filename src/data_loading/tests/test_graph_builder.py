@@ -10,7 +10,7 @@ from _pytest.logging import LogCaptureFixture
 
 from src.base.build_test_dataset import TEST_DATASET_ALL_COLUMNS
 from src.data_loading.graph_builder import GraphDataset
-from src.data_loading.tabular_dataset import TabularDataset
+from src.data_loading.tabular_dataset import TabularDataset, TabularDatasetDefinition
 
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent.parent
 CONFIG_PATH = ROOT_DIR / 'config/general_config.json'
@@ -25,9 +25,12 @@ class TestGraphDataset:
 
     def setup_method(self) -> None:
         self._dataset = TabularDataset(
-            data_path=self._data_path,
-            numeric_columns=[], categorical_columns=[], text_columns=[],
-            required_columns=TEST_DATASET_ALL_COLUMNS,
+            TabularDatasetDefinition(
+                data_path=self._data_path,
+                numeric_columns=[], categorical_columns=[], text_columns=[],
+                required_columns=TEST_DATASET_ALL_COLUMNS,
+                train_val_test_portions=(0.7, 0.15, 0.15),
+            ),
         )
 
     def test_check_matching_definitions_fails_on_missing_nodes(self) -> None:
