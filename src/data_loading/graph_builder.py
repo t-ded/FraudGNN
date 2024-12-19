@@ -5,7 +5,6 @@ from typing import Optional, Any, cast, Iterator
 import dgl
 import polars as pl
 import torch
-from dgl import DGLGraph
 
 logger = logging.getLogger(__name__)
 
@@ -114,20 +113,20 @@ class GraphDataset:
         return source_tabular_data
 
     def _enrich_with_features(self, source_tabular_data: pl.LazyFrame) -> None:
-        assert isinstance(self._graph, DGLGraph), 'Can only enrich with features after graph has been initialized.'
+        assert isinstance(self._graph, dgl.DGLGraph), 'Can only enrich with features after graph has been initialized.'
         for node_col, node_feature_cols in self._node_feature_cols.items():
             node_type = self._column_name_to_node_type_mapping[node_col]
             for feature_col in node_feature_cols:
                 self._graph.nodes[node_type].data[feature_col] = source_tabular_data.select(feature_col).collect().to_torch()
 
     def _enrich_with_labels(self, source_tabular_data: pl.LazyFrame) -> None:
-        assert isinstance(self._graph, DGLGraph), 'Can only enrich with labels after graph has been initialized.'
+        assert isinstance(self._graph, dgl.DGLGraph), 'Can only enrich with labels after graph has been initialized.'
         for node_col, label_col in self._node_label_cols.items():
             node_type = self._column_name_to_node_type_mapping[node_col]
             self._graph.nodes[node_type].data[label_col] = source_tabular_data.select(label_col).collect().to_torch().long()
 
     def update_graph(self, incr: pl.DataFrame) -> None:
-        assert isinstance(self._graph, DGLGraph), 'Can only update graph after graph has been initialized.'
+        assert isinstance(self._graph, dgl.DGLGraph), 'Can only update graph after graph has been initialized.'
 
         for node_type, node_defining_col in self._node_type_to_column_name_mapping.items():
             incr = self._assign_node_ids_incr(incr.lazy(), node_type, node_defining_col).collect()
@@ -168,7 +167,7 @@ class GraphDataset:
         )
 
     def _get_new_data_update_old_data(self, node_type: str, node_defining_col: str, incr: pl.DataFrame) -> dict[str, torch.Tensor]:
-        assert isinstance(self._graph, DGLGraph), 'Can only update graph after graph has been initialized.'
+        assert isinstance(self._graph, dgl.DGLGraph), 'Can only update graph after graph has been initialized.'
 
         incr_new = incr.filter(pl.col('is_new_node_mask'))
         incr_old = incr.filter(~pl.col('is_new_node_mask'))
@@ -198,14 +197,14 @@ class GraphDataset:
         return new_nodes_data
 
     def _update_edges_from_incr(self, incr: pl.DataFrame) -> None:
-        assert isinstance(self._graph, DGLGraph), 'Can only update graph after graph has been initialized.'
+        assert isinstance(self._graph, dgl.DGLGraph), 'Can only update graph after graph has been initialized.'
 
         for edge_description, edge_definition in self._edge_definitions.items():
             edge_src_dst = incr.select(edge_definition).to_numpy(writable=True).T
             self._graph.add_edges(*edge_src_dst, etype=edge_description[1])
 
     def get_homogeneous(self, store_type: bool = True) -> dgl.DGLGraph:
-        assert isinstance(self._graph, DGLGraph), 'Can only convert graph to homogeneous after graph has been initialized.'
+        assert isinstance(self._graph, dgl.DGLGraph), 'Can only convert graph to homogeneous after graph has been initialized.'
 
         homo_g = dgl.to_homogeneous(self._graph, store_type=store_type)
 
