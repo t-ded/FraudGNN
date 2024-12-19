@@ -3,7 +3,7 @@ from pathlib import Path
 
 from src.base.build_test_dataset import TEST_DATASET_ALL_COLUMNS, TEST_DATASET_NUMERIC_COLUMNS, TEST_DATASET_CATEGORICAL_COLUMNS, TEST_DATASET_TEXT_COLUMNS
 from src.data_loading.data_transformer import DataTransformer
-from src.data_loading.tabular_dataset import TabularDataset, TabularDatasetDefinition
+from src.data_loading.tabular_dataset import TabularDataset, TabularDatasetDefinition, TrainValTestRatios
 
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent.parent
 CONFIG_PATH = ROOT_DIR / 'config/general_config.json'
@@ -22,7 +22,7 @@ class TestDataTransformer:
                 data_path=self._data_path,
                 numeric_columns=TEST_DATASET_NUMERIC_COLUMNS, categorical_columns=TEST_DATASET_CATEGORICAL_COLUMNS, text_columns=TEST_DATASET_TEXT_COLUMNS,
                 required_columns=TEST_DATASET_ALL_COLUMNS,
-                train_val_test_portions=(0.7, 0.15, 0.15)
+                train_val_test_ratios=TrainValTestRatios(0.7, 0.15, 0.15)
             ),
         )
         self._transformer = DataTransformer()

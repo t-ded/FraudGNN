@@ -1,8 +1,14 @@
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Iterable, NamedTuple
 
 import polars as pl
 from polars._typing import IntoExpr
+
+
+class TrainValTestRatios(NamedTuple):
+    train_ratio: float
+    val_ratio: float
+    test_ratio: float
 
 
 @dataclass
@@ -12,9 +18,9 @@ class TabularDatasetDefinition:
     categorical_columns: list[str]
     text_columns: list[str]
     required_columns: list[str]
-    train_val_test_portions: tuple[float, float, float]
+    train_val_test_ratios: TrainValTestRatios
 
-
+#TODO: Add method that provides the three separate datasets via a filter on value and also the full dataset
 class TabularDataset:
 
     def __init__(self, tabular_dataset_definition: TabularDatasetDefinition) -> None:
@@ -22,9 +28,38 @@ class TabularDataset:
         self._numeric_columns = tabular_dataset_definition.numeric_columns
         self._categorical_columns = tabular_dataset_definition.categorical_columns
         self._text_columns = tabular_dataset_definition.text_columns
+        self._validate_column_type_assignment()
 
         self._full_ldf = pl.scan_csv(tabular_dataset_definition.data_path)
         self._ldf = pl.scan_csv(tabular_dataset_definition.data_path).select(tabular_dataset_definition.required_columns)
+
+        self._train_val_test_ratios = tabular_dataset_definition.train_val_test_ratios
+        self._create_train_val_test_mask()
+
+    def _validate_column_type_assignment(self) -> None:
+        assert not set(self._numeric_columns) & set(self._text_columns), f'Numeric and text columns have joint elements: {set(self._numeric_columns) & set(self._text_columns)}.'
+        assert not set(self._numeric_columns) & set(self._categorical_columns), f'Numeric and categorical columns have joint elements: {set(self._numeric_columns) & set(self._categorical_columns)}.'
+        assert not set(self._categorical_columns) & set(self._text_columns), f'Categorical and text columns have joint elements: {set(self._categorical_columns) & set(self._text_columns)}.'
+
+    def _create_train_val_test_mask(self) -> None:
+        self._validate_train_val_test_split_ratios()
+        self._ldf = self._ldf.with_row_index('row_index')
+
+        df_len = self._ldf.select(pl.len()).collect().item()
+        dataset_split = pl.Enum(['train', 'val', 'test'])
+        self.with_columns(
+            pl.when(pl.col('row_index') <= df_len)
+            .then(pl.lit('test'))
+            .when(pl.col('row_index') <= df_len * (1 - self._train_val_test_ratios.test_ratio))
+            .then(pl.lit('val'))
+            .when(pl.col('row_index') <= df_len * (1 - self._train_val_test_ratios.test_ratio - self._train_val_test_ratios.val_ratio))
+            .then(pl.lit('train'))
+            .cast(dataset_split)
+            .alias('train_val_test_mask')
+        )
+
+    def _validate_train_val_test_split_ratios(self) -> None:
+        assert sum(self._train_val_test_ratios) == 1.0
 
     @property
     def columns(self) -> list[str]:

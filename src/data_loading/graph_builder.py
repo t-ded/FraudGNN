@@ -103,7 +103,8 @@ class GraphDataset:
         self._enrich_with_labels(source_tabular_data)
 
     def _assign_node_ids(self, source_tabular_data: pl.LazyFrame) -> pl.LazyFrame:
-        source_tabular_data = source_tabular_data.with_columns(pl.int_range(0, pl.len()).alias('row_index'))
+        if 'row_index' not in source_tabular_data.collect_schema().names():
+            source_tabular_data = source_tabular_data.with_columns(pl.int_range(0, pl.len()).alias('row_index'))
         for node_type, node_defining_col in self._node_type_to_column_name_mapping.items():
             self._value_node_id_mapping[node_type] = dict(cast(
                 Iterator[tuple[Any, int]],
