@@ -101,7 +101,7 @@ class TestGraphDataset:
                 batch_size=64,
             ),
         )
-        graph_dataset.build_graph(source_tabular_dataset=self._dataset)
+        graph_dataset.build_graph(source_tabular_data=self._dataset.ldf)
 
         test_graph = graph_dataset.graph
 
@@ -128,7 +128,7 @@ class TestGraphDataset:
                 batch_size=64,
             ),
         )
-        graph_dataset.build_graph(source_tabular_dataset=self._dataset)
+        graph_dataset.build_graph(source_tabular_data=self._dataset.ldf)
 
         assert graph_dataset.graph is not None
         assert list(graph_dataset.graph.ndata.keys()) ==  ['random_feature', 'category_len', 'test_amount']
@@ -156,7 +156,7 @@ class TestGraphDataset:
                 batch_size=64,
             ),
         )
-        graph_dataset.build_graph(source_tabular_dataset=self._dataset)
+        graph_dataset.build_graph(source_tabular_data=self._dataset.ldf)
 
         assert graph_dataset.graph is not None
         np.testing.assert_array_equal(graph_dataset.graph.ndata['label']['transaction'].flatten(), labels)
@@ -173,7 +173,7 @@ class TestGraphDataset:
                 batch_size=64,
             ),
         )
-        graph_dataset.build_graph(source_tabular_dataset=self._dataset)
+        graph_dataset.build_graph(source_tabular_data=self._dataset.ldf)
 
         incr = pl.DataFrame({'test_id': [6, 7, 8], 'test_customer': ['B', 'C', 'F'], 'test_counterparty': ['ddd', 'eee', 'aaa']})
         graph_dataset.update_graph(incr)
@@ -203,7 +203,7 @@ class TestGraphDataset:
                 batch_size=64,
             ),
         )
-        graph_dataset.build_graph(source_tabular_dataset=self._dataset)
+        graph_dataset.build_graph(source_tabular_data=self._dataset.ldf)
 
         incr_rnd_feature = np.random.rand(3)
         incr = pl.DataFrame(
@@ -241,7 +241,7 @@ class TestGraphDataset:
                 batch_size=64,
             ),
         )
-        graph_dataset.build_graph(source_tabular_dataset=self._dataset)
+        graph_dataset.build_graph(source_tabular_data=self._dataset.ldf)
 
         incr = pl.DataFrame({'test_id': [6, 7, 8], 'test_customer': ['B', 'C', 'F'], 'label': [0, 0, 0]})
         graph_dataset.update_graph(incr)
@@ -267,7 +267,7 @@ class TestGraphDataset:
                 batch_size=64,
             ),
         )
-        graph_dataset.build_graph(source_tabular_dataset=self._dataset)
+        graph_dataset.build_graph(source_tabular_data=self._dataset.ldf)
 
         incr = pl.DataFrame(
             {
@@ -305,7 +305,7 @@ class TestGraphDataset:
                 batch_size=64,
             ),
         )
-        graph_dataset.build_graph(source_tabular_dataset=self._dataset)
+        graph_dataset.build_graph(source_tabular_data=self._dataset.ldf)
 
         incr = pl.DataFrame({'test_id': [1], 'test_customer': ['A'], 'label': [1]})
         graph_dataset.update_graph(incr)
@@ -333,7 +333,7 @@ class TestGraphDataset:
                 batch_size=64,
             ),
         )
-        graph_dataset.build_graph(source_tabular_dataset=self._dataset)
+        graph_dataset.build_graph(source_tabular_data=self._dataset.ldf)
 
         test_homogeneous_graph = graph_dataset.get_homogeneous(store_type=False)
         expected_features = torch.zeros((15, 3))

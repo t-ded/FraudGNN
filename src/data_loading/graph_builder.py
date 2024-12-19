@@ -7,8 +7,6 @@ import polars as pl
 import torch
 from dgl import DGLGraph
 
-from src.data_loading.tabular_dataset import TabularDataset
-
 logger = logging.getLogger(__name__)
 
 
@@ -88,44 +86,45 @@ class GraphDataset:
             logger.warning(f'Nodes defined by column {node_without_edges} do not have any edges defined for them, will ignore these.')
             self._node_defining_cols.remove(node_without_edges)
 
-    def build_graph(self, source_tabular_dataset: TabularDataset) -> None:
-        self._assign_node_ids(source_tabular_dataset)
+    def build_graph(self, source_tabular_data: pl.LazyFrame) -> None:
+        source_tabular_data = self._assign_node_ids(source_tabular_data)
 
         self._graph = dgl.heterograph(
             data_dict={
-                edge_description: tuple(source_tabular_dataset.ldf.select(edge_definition).collect().to_numpy(writable=True).T)
+                edge_description: tuple(source_tabular_data.select(edge_definition).collect().to_numpy(writable=True).T)
                 for edge_description, edge_definition in self._edge_definitions.items()
             },
             num_nodes_dict={
-                node_type: source_tabular_dataset.ldf.select(pl.col(node_defining_col).n_unique()).collect().item()
+                node_type: source_tabular_data.select(pl.col(node_defining_col).n_unique()).collect().item()
                 for node_type, node_defining_col in self._node_type_to_column_name_mapping.items()
             }
         )
 
-        self._enrich_with_features(source_tabular_dataset)
-        self._enrich_with_labels(source_tabular_dataset)
+        self._enrich_with_features(source_tabular_data)
+        self._enrich_with_labels(source_tabular_data)
 
-    def _assign_node_ids(self, source_tabular_dataset: TabularDataset) -> None:
-        source_tabular_dataset.with_columns(pl.int_range(0, pl.len()).alias('row_index'))
+    def _assign_node_ids(self, source_tabular_data: pl.LazyFrame) -> pl.LazyFrame:
+        source_tabular_data = source_tabular_data.with_columns(pl.int_range(0, pl.len()).alias('row_index'))
         for node_type, node_defining_col in self._node_type_to_column_name_mapping.items():
             self._value_node_id_mapping[node_type] = dict(cast(
                 Iterator[tuple[Any, int]],
-                source_tabular_dataset.ldf.select(node_defining_col, pl.col('row_index').first().over(node_defining_col)).collect().iter_rows()
+                source_tabular_data.select(node_defining_col, pl.col('row_index').first().over(node_defining_col)).collect().iter_rows()
             ))
-            source_tabular_dataset.with_columns(pl.col(node_defining_col).replace_strict(self._value_node_id_mapping[node_type]))
+            source_tabular_data = source_tabular_data.with_columns(pl.col(node_defining_col).replace_strict(self._value_node_id_mapping[node_type]))
+        return source_tabular_data
 
-    def _enrich_with_features(self, source_tabular_dataset: TabularDataset) -> None:
+    def _enrich_with_features(self, source_tabular_data: pl.LazyFrame) -> None:
         assert isinstance(self._graph, DGLGraph), 'Can only enrich with features after graph has been initialized.'
         for node_col, node_feature_cols in self._node_feature_cols.items():
             node_type = self._column_name_to_node_type_mapping[node_col]
             for feature_col in node_feature_cols:
-                self._graph.nodes[node_type].data[feature_col] = source_tabular_dataset.ldf.select(feature_col).collect().to_torch()
+                self._graph.nodes[node_type].data[feature_col] = source_tabular_data.select(feature_col).collect().to_torch()
 
-    def _enrich_with_labels(self, source_tabular_dataset: TabularDataset) -> None:
+    def _enrich_with_labels(self, source_tabular_data: pl.LazyFrame) -> None:
         assert isinstance(self._graph, DGLGraph), 'Can only enrich with labels after graph has been initialized.'
         for node_col, label_col in self._node_label_cols.items():
             node_type = self._column_name_to_node_type_mapping[node_col]
-            self._graph.nodes[node_type].data[label_col] = source_tabular_dataset.ldf.select(label_col).collect().to_torch().long()
+            self._graph.nodes[node_type].data[label_col] = source_tabular_data.select(label_col).collect().to_torch().long()
 
     def update_graph(self, incr: pl.DataFrame) -> None:
         assert isinstance(self._graph, DGLGraph), 'Can only update graph after graph has been initialized.'
