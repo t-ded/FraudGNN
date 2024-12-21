@@ -41,6 +41,10 @@ class GraphDataset:
         assert self._graph is not None, 'Cannot retrieve labels from graph prior to initialization.'
         return self._graph.ndata['label']
 
+    @property
+    def node_label_cols(self) -> dict[str, str]:
+        return self._node_label_cols
+
     def _validate(self) -> None:
         self._check_matching_node_edge_definitions()
         self._check_consistent_node_type_column_pairing()

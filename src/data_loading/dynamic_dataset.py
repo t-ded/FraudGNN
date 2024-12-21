@@ -1,7 +1,9 @@
 import logging
-from typing import Generator
+from functools import cached_property
+from typing import Generator, Optional
 
 import polars as pl
+import torch
 from dgl import DGLGraph
 from dgl.data import DGLDataset
 
@@ -34,6 +36,23 @@ class DynamicDataset(DGLDataset):
     @property
     def graph_dataset(self) -> GraphDataset:
         return self._graph_dataset
+
+    @property
+    def graph(self) -> Optional[DGLGraph]:
+        return self._graph_dataset.graph
+
+    @cached_property
+    def graph_features(self) -> dict[str, torch.Tensor]:
+        features = {}
+        if self._graph_dataset.graph is not None:
+            for feature, ntype_feature_values in self._graph_dataset.graph.ndata.items():
+                if feature not in self._graph_dataset.node_label_cols.values():
+                    for ntype, feature_values in ntype_feature_values.items():
+                        if ntype not in features:
+                            features[ntype] = feature_values.type(torch.float32)
+                        else:
+                            features[ntype] = torch.cat((features[ntype], feature_values.type(torch.float32)), dim=1)
+        return features
 
     @staticmethod
     def get_streaming_batches(frame: pl.LazyFrame, batch_size: int) -> Generator[pl.LazyFrame, None, None]:
