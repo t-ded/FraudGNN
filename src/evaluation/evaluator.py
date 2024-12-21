@@ -8,6 +8,8 @@ from torch import nn, optim
 from tqdm import tqdm
 
 from src.data_loading.dynamic_dataset import DynamicDataset
+from src.data_loading.graph_builder import GraphDatasetDefinition
+from src.data_loading.tabular_dataset import TabularDatasetDefinition
 
 logger = logging.getLogger(__name__)
 
@@ -26,10 +28,14 @@ class EvaluationMetrics:
 
 class Evaluator:
 
-    def __init__(self, model: nn.Module, hyperparameters: GNNHyperparameters, dynamic_dataset: DynamicDataset) -> None:
+    def __init__(
+            self, model: nn.Module, hyperparameters: GNNHyperparameters,
+            tabular_dataset_definition: TabularDatasetDefinition, graph_dataset_definition: GraphDatasetDefinition,
+            identifier: str = 'GNNEvaluation',
+    ) -> None:
         self._model = model
         self._hyperparameters = hyperparameters
-        self._dynamic_dataset = dynamic_dataset
+        self._dynamic_dataset = DynamicDataset(name=identifier + 'DynamicDataset', tabular_dataset_definition=tabular_dataset_definition, graph_dataset_definition=graph_dataset_definition)
 
         self._criterion = nn.BCEWithLogitsLoss()
         self._optimizer = optim.Adam(self._model.parameters(), lr=self._hyperparameters.learning_rate)

@@ -38,6 +38,7 @@ class TestDynamicDataset:
                     ('customer', 'makes', 'transaction'): ('test_customer', 'test_id'),
                 },
             ),
+            preprocess_tabular=False,
         )
 
     def test_graph_is_setup_correctly(self) -> None:

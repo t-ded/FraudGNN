@@ -7,6 +7,7 @@ import torch
 from dgl import DGLGraph
 from dgl.data import DGLDataset
 
+from src.data_loading.data_transformer import DataTransformer
 from src.data_loading.graph_builder import GraphDataset, GraphDatasetDefinition
 from src.data_loading.tabular_dataset import TabularDataset, TabularDatasetDefinition
 
@@ -15,13 +16,45 @@ logger = logging.getLogger(__name__)
 
 class DynamicDataset(DGLDataset):
 
-    def __init__(self, name: str, tabular_dataset_definition: TabularDatasetDefinition, graph_dataset_definition: GraphDatasetDefinition, verbose: bool = True) -> None:
+    def __init__(
+            self, name: str,
+            tabular_dataset_definition: TabularDatasetDefinition, graph_dataset_definition: GraphDatasetDefinition,
+            verbose: bool = True, preprocess_tabular: bool = True,
+    ) -> None:
         self._tabular_dataset = TabularDataset(tabular_dataset_definition)
         self._graph_dataset = GraphDataset(graph_dataset_definition)
+        self._data_transformer = DataTransformer() if preprocess_tabular else None
         super().__init__(name=name, verbose=verbose)
 
     def process(self) -> None:
+        if self._data_transformer is not None:
+            self._fit_transformer()
+            self._preprocess_tabular_dataset()
         self._graph_dataset.build_graph(self._tabular_dataset.train_ldf)
+
+    def _fit_transformer(self) -> None:
+        assert self._data_transformer is not None, 'Data Transformer must be initialized prior to transforming data.'
+        self._data_transformer.fit_numeric_scaler(
+            self.tabular_dataset.train_ldf.collect(),
+            self.tabular_dataset.numeric_columns,
+        )
+        self._data_transformer.fit_encoder(
+            self.tabular_dataset.df,  # TODO: Assuming knowledge of the whole dataset in advance for simplicity
+            self.tabular_dataset.categorical_columns,
+        )
+
+    def _preprocess_tabular_dataset(self) -> None:
+        assert self._data_transformer is not None, 'Data Transformer must be initialized prior to transforming data.'
+        self.tabular_dataset.with_columns(
+            *self._data_transformer.get_normalized_numeric_columns(
+                self.tabular_dataset.df,
+                self.tabular_dataset.numeric_columns,
+            ),
+            *self._data_transformer.get_encoded_categorical_columns(
+                self.tabular_dataset.df,
+                self.tabular_dataset.categorical_columns,
+            ),
+        )
 
     def __getitem__(self, idx: int) -> DGLGraph:
         return self._graph_dataset.graph

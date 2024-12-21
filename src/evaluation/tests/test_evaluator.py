@@ -8,7 +8,6 @@ from dgl import DGLGraph
 from torch import nn
 
 from src.base.build_test_dataset import ENRICHED_TEST_DATASET_ALL_COLUMNS
-from src.data_loading.dynamic_dataset import DynamicDataset
 from src.data_loading.graph_builder import GraphDatasetDefinition
 from src.data_loading.tabular_dataset import TabularDatasetDefinition, TrainValTestRatios
 from src.evaluation.evaluator import Evaluator, GNNHyperparameters
@@ -44,35 +43,32 @@ class TestEvaluator:
 
     def setup_method(self) -> None:
 
-        self._dataset = DynamicDataset(
-            name='test_dataset',
-            tabular_dataset_definition=TabularDatasetDefinition(
-                data_path=self._data_path,
-                numeric_columns=['test_amount'], categorical_columns=['category_len'], text_columns=[],
-                required_columns=ENRICHED_TEST_DATASET_ALL_COLUMNS,
-                train_val_test_ratios=TrainValTestRatios(0.5, 0.25, 0.25),
-            ),
-            graph_dataset_definition=GraphDatasetDefinition(
-                node_feature_cols={'test_id': ['test_amount'], 'test_customer': ['category_len'], 'test_counterparty': ['random_feature']},
-                node_label_cols={'test_id': 'label'},
-                edge_definitions={
-                    ('customer', 'sends', 'transaction'): ('test_customer', 'test_id'),
-                    ('transaction', 'sent_to', 'counterparty'): ('test_id', 'test_counterparty'),
-                    ('counterparty', 'same_id_as', 'customer'): ('test_counterparty', 'test_customer'),
-                },
-            ),
+        tabular_definition = TabularDatasetDefinition(
+            data_path=self._data_path,
+            numeric_columns=['test_amount'], categorical_columns=['category_len'], text_columns=[],
+            required_columns=ENRICHED_TEST_DATASET_ALL_COLUMNS,
+            train_val_test_ratios=TrainValTestRatios(0.5, 0.25, 0.25),
         )
-
-        assert self._dataset.graph is not None
-        self._model = NaiveRGCN(1, 2, 1, self._dataset.graph.etypes)
+        graph_definition = GraphDatasetDefinition(
+            node_feature_cols={'test_id': ['test_amount'], 'test_customer': ['category_len'], 'test_counterparty': ['random_feature']},
+            node_label_cols={'test_id': 'label'},
+            edge_definitions={
+                ('customer', 'sends', 'transaction'): ('test_customer', 'test_id'),
+                ('transaction', 'sent_to', 'counterparty'): ('test_id', 'test_counterparty'),
+                ('counterparty', 'same_id_as', 'customer'): ('test_counterparty', 'test_customer'),
+            },
+        )
+        self._model = NaiveRGCN(1, 2, 1, [key[1] for key in graph_definition.edge_definitions.keys()])
 
         self._evaluator = Evaluator(
             model=self._model,
-            dynamic_dataset=self._dataset,
             hyperparameters=GNNHyperparameters(
                 learning_rate=0.01,
                 batch_size=1,
             ),
+            tabular_dataset_definition=tabular_definition,
+            graph_dataset_definition=graph_definition,
+            identifier='GNNTest'
         )
 
     def test_train(self) -> None:
