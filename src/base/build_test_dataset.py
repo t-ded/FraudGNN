@@ -13,12 +13,9 @@ TEST_DATASET_SOURCE_DATA: dict[str, list[str] | list[int]] = {
 
 TEST_DATASET_ALL_COLUMNS: list[str] = list(TEST_DATASET_SOURCE_DATA.keys())
 TEST_DATASET_NUMERIC_COLUMNS: list[str] = [
-    'test_id',
     'test_amount',
 ]
 TEST_DATASET_CATEGORICAL_COLUMNS: list[str] = [
-    'test_customer',
-    'test_counterparty',
     'test_category',
 ]
 TEST_DATASET_TEXT_COLUMNS: list[str] = [
@@ -41,7 +38,6 @@ ENRICHED_TEST_DATASET_NUMERIC_COLUMNS: list[str] = [
     'test_amount',
     'category_len',
     'random_feature',
-    'label',
 ]
 ENRICHED_TEST_DATASET_CATEGORICAL_COLUMNS: list[str] = [
     'test_category',

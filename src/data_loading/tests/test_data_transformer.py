@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import numpy as np
+
 from src.base.build_test_dataset import TEST_DATASET_ALL_COLUMNS, TEST_DATASET_NUMERIC_COLUMNS, TEST_DATASET_CATEGORICAL_COLUMNS, TEST_DATASET_TEXT_COLUMNS
 from src.data_loading.data_transformer import DataTransformer
 from src.data_loading.tabular_dataset import TabularDataset, TabularDatasetDefinition, TrainValTestRatios
@@ -28,9 +30,21 @@ class TestDataTransformer:
         self._transformer = DataTransformer()
 
     def test_numeric_normalization(self) -> None:
-        self._transformer.normalize_numeric(self._dataset)
-        assert self._dataset.df.select('test_amount').to_series().to_list() == [0, 0.25, 0.5, 0.75, 1]
+        self._transformer.fit_numeric_scaler(self._dataset.df, TEST_DATASET_NUMERIC_COLUMNS)
+        self._dataset.with_columns(self._transformer.get_normalized_numeric_columns(self._dataset.df, TEST_DATASET_NUMERIC_COLUMNS))
+        np.testing.assert_array_almost_equal(self._dataset.df.select('test_amount').to_series().to_list(), [-1.414, -0.707, 0.0, 0.707, 1.414], decimal=3)
+
+    def test_numeric_normalization_different_fit_transform(self) -> None:
+        self._transformer.fit_numeric_scaler(self._dataset.train_ldf.collect(), TEST_DATASET_NUMERIC_COLUMNS)
+        self._dataset.with_columns(self._transformer.get_normalized_numeric_columns(self._dataset.df, TEST_DATASET_NUMERIC_COLUMNS))
+        np.testing.assert_array_almost_equal(self._dataset.df.select('test_amount').to_series().to_list(), [-1.342, -0.447, 0.447, 1.342, 2.236], decimal=3)
 
     def test_categorical_encoding(self) -> None:
-        self._transformer.encode_categorical(self._dataset)
+        self._transformer.fit_encoder(self._dataset.df, TEST_DATASET_CATEGORICAL_COLUMNS)
+        self._dataset.with_columns(self._transformer.get_encoded_categorical_columns(self._dataset.df, TEST_DATASET_CATEGORICAL_COLUMNS))
         assert self._dataset.df.select('test_category').to_series().to_list() == [0, 1, 2, 3, 4]
+
+    def test_categorical_encoding_different_fit_transform(self) -> None:
+        self._transformer.fit_encoder(self._dataset.train_ldf.collect(), TEST_DATASET_CATEGORICAL_COLUMNS)
+        self._dataset.with_columns(self._transformer.get_encoded_categorical_columns(self._dataset.df, TEST_DATASET_CATEGORICAL_COLUMNS))
+        assert self._dataset.df.select('test_category').to_series().to_list() == [0, 1, 2, 3, -1]
