@@ -22,10 +22,11 @@ class TestTabularDataset:
                 data_path=self._data_path,
                 numeric_columns=[], categorical_columns=[], text_columns=[],
                 required_columns=TEST_DATASET_ALL_COLUMNS,
-                train_val_test_ratios=TrainValTestRatios(0.7, 0.15, 0.15)
+                train_val_test_ratios=TrainValTestRatios(0.5, 0.25, 0.25)
             ),
         )
         assert tabular_dataset.df.shape == (cast(list, TEST_DATASET_SOURCE_DATA['test_id'])[-1], len(TEST_DATASET_ALL_COLUMNS) + 2)
+        assert tabular_dataset.df.select('train_val_test_mask').to_series().to_list() == ['train', 'train', 'train', 'val', 'test']
 
     def test_data_loading_with_categories(self) -> None:
         tabular_dataset = TabularDataset(
