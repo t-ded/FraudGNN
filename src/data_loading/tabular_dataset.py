@@ -20,7 +20,6 @@ class TabularDatasetDefinition:
     required_columns: list[str]
     train_val_test_ratios: TrainValTestRatios
 
-#TODO: Add method that provides the three separate datasets via a filter on value and also the full dataset
 class TabularDataset:
 
     def __init__(self, tabular_dataset_definition: TabularDatasetDefinition) -> None:
@@ -83,6 +82,18 @@ class TabularDataset:
     @property
     def df(self) -> pl.DataFrame:
         return self._ldf.collect()
+
+    @property
+    def train_ldf(self) -> pl.LazyFrame:
+        return self._ldf.filter((pl.col('train_val_test_mask') == 'train'))
+
+    @property
+    def val_ldf(self) -> pl.LazyFrame:
+        return self._ldf.filter((pl.col('train_val_test_mask') == 'val'))
+
+    @property
+    def test_ldf(self) -> pl.LazyFrame:
+        return self._ldf.filter((pl.col('train_val_test_mask') == 'test'))
 
     def with_columns(self, *exprs: IntoExpr | Iterable[IntoExpr]) -> None:
         self._ldf = self._ldf.with_columns(*exprs)
