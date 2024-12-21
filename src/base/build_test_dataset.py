@@ -3,7 +3,7 @@ from pathlib import Path
 
 import polars as pl
 
-TEST_DATASET_SOURCE_DATA = {
+TEST_DATASET_SOURCE_DATA: dict[str, list[str] | list[int]] = {
     'test_id': [1, 2, 3, 4, 5],
     'test_amount': [100, 200, 300, 400, 500],
     'test_customer': ['A', 'B', 'C', 'D', 'E'],
