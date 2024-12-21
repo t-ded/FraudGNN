@@ -2,7 +2,6 @@ import json
 from pathlib import Path
 
 import dgl.nn as dglnn
-import pytest
 import torch
 import torch.nn.functional as F
 from dgl import DGLGraph
@@ -21,7 +20,7 @@ with open(CONFIG_PATH) as f:
     config = json.load(f)
 
 
-class RGCN(nn.Module):
+class NaiveRGCN(nn.Module):
     def __init__(self, in_feats: int, hid_feats: int, out_feats: int, rel_names: list[str]) -> None:
         super().__init__()
 
@@ -65,7 +64,7 @@ class TestEvaluator:
         )
 
         assert self._dataset.graph is not None
-        self._model = RGCN(1, 2, 1, self._dataset.graph.etypes)
+        self._model = NaiveRGCN(1, 2, 1, self._dataset.graph.etypes)
 
         self._evaluator = Evaluator(
             model=self._model,
@@ -76,44 +75,15 @@ class TestEvaluator:
             ),
         )
 
-    def test_train(self):
+    def test_train(self) -> None:
         self._evaluator.train(num_epochs=1)
         assert True
-    #
-    # def test_validate(self):
-    #     """
-    #     Tests that the validation function calculates a loss value.
-    #     """
-    #     loss = self._evaluator.validate()
-    #     assert loss >= 0, "Validation loss should be non-negative."
-    #
-    # def test_stream_evaluate(self):
-    #     """
-    #     Tests that streaming evaluation processes batches correctly.
-    #     """
-    #     data_loader = DataLoader(self.dummy_data, batch_size=1)
-    #     results = self._evaluator.stream_evaluate(data_loader)
-    #     assert isinstance(results, list), "Streaming evaluation should return a list."
-    #     assert 'overall_loss' in results[-1], "Streaming evaluation results should include overall loss."
-    #
-    # def test_get_labels(self):
-    #     """
-    #     Tests the _get_labels function to ensure it extracts labels correctly.
-    #     """
-    #     labels = self._evaluator._get_labels(self.graph)
-    #     assert torch.equal(labels, self.graph.nodes['item'].data['label']), "Labels should match the ground truth."
-    #
-    # def test_device_setting(self):
-    #     """
-    #     Tests if the model and data are moved to the appropriate device.
-    #     """
-    #     device = self._evaluator.device
-    #     assert self._model.conv1['likes'].weight.device.type == device, f"Model weights should be on device {device}."
-    #
-    # def test_training_with_no_labels(self):
-    #     """
-    #     Ensures that the evaluator raises an appropriate error when no labels are present in the graph.
-    #     """
-    #     del self.graph.nodes['item'].data['label']  # Remove labels for this test
-    #     with pytest.raises(ValueError, match="No labeled nodes found in the graph."):
-    #         self._evaluator.validate()
+
+    def test_validate(self) -> None:
+        evaluation_results = self._evaluator.stream_evaluate('validation')
+        assert evaluation_results.total_loss >= 0
+        assert evaluation_results.number_of_samples == 1
+
+    def test_testing(self) -> None:
+        evaluation_results = self._evaluator.stream_evaluate('testing')
+        assert evaluation_results.number_of_samples == 1

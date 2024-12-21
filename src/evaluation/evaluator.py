@@ -18,6 +18,12 @@ class GNNHyperparameters:
     batch_size: int
 
 
+@dataclass
+class EvaluationMetrics:
+    number_of_samples: int
+    total_loss: float
+
+
 class Evaluator:
 
     def __init__(self, model: nn.Module, hyperparameters: GNNHyperparameters, dynamic_dataset: DynamicDataset) -> None:
@@ -60,13 +66,20 @@ class Evaluator:
             logger.info(f'Epoch {epoch + 1}/{num_epochs} - Loss: {loss.item()}')
 
     def _validate_on_increment(self, incr: pl.DataFrame, compute_metrics: bool) -> dict[str, float]:
+        assert self._dynamic_dataset.graph is not None, 'Graph should be initialized by this point!'
+
         metrics: dict[str, float] = {}
 
+        label_col = 'transaction'  # TODO: Generalize this
+        mask = torch.cat((
+            torch.zeros(self._dynamic_dataset.graph.num_nodes(label_col)),
+            torch.ones(len(incr)),
+        )).type(torch.bool)
         self._dynamic_dataset.update_graph_with_increment(incr)
+
         with torch.no_grad():
-            label_col = 'transaction'  # TODO: Generalize this
-            logits = self._model(self._dynamic_dataset.graph, self._dynamic_dataset.graph_features)[label_col]
-            labels = self._dynamic_dataset.graph_dataset.labels[label_col].type(torch.float32)
+            logits = self._model(self._dynamic_dataset.graph, self._dynamic_dataset.graph_features)[label_col][mask]
+            labels = self._dynamic_dataset.graph_dataset.labels[label_col].type(torch.float32)[mask]
             loss = self._criterion(logits, labels)
 
             if compute_metrics:
@@ -75,7 +88,7 @@ class Evaluator:
 
         return {'loss': loss.item(), 'n_labelled_samples': len(labels)} | metrics
 
-    def stream_evaluate(self, mode: Literal['validation', 'testing']) -> None:
+    def stream_evaluate(self, mode: Literal['validation', 'testing']) -> EvaluationMetrics:
         assert self._dynamic_dataset.graph is not None, 'Graph should be initialized by this point!'
 
         if mode == 'validation':
@@ -91,16 +104,18 @@ class Evaluator:
 
         self._model.eval()
 
-        total_loss = 0.0
-        total_samples = 0
+        final_metrics = EvaluationMetrics(number_of_samples=0, total_loss=0.0)
         streaming_batches = self._dynamic_dataset.get_streaming_batches(ldf, self._hyperparameters.batch_size)
 
         for incr in tqdm(streaming_batches, desc='Evaluating'):
             metrics = self._validate_on_increment(incr.collect(), compute_metrics)
-            total_loss += metrics['loss']
-            total_samples += int(metrics['n_labelled_samples'])
+            final_metrics.total_loss += metrics['loss']
+            final_metrics.number_of_samples += int(metrics['n_labelled_samples'])
 
         if mode == 'validation':
-            logger.info(f'Validation process finished, final validation loss: {total_loss / total_samples:_2f}.')
+            logger.info(f'Validation process finished, final validation loss: {final_metrics.total_loss / final_metrics.number_of_samples:_.2f}.')
         elif mode == 'testing':
-            logger.info(f'Testing process finished, final validation loss: {total_loss / total_samples:_2f}.')
+            logger.info(f'Testing process finished, final validation loss: {final_metrics.total_loss / final_metrics.number_of_samples:_.2f}.')
+
+        # TODO: More profound metric return
+        return final_metrics
