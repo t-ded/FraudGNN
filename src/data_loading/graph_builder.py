@@ -36,6 +36,11 @@ class GraphDataset:
     def graph(self) -> Optional[dgl.DGLGraph]:
         return self._graph
 
+    @property
+    def labels(self) -> dict[str, torch.Tensor]:
+        assert self._graph is not None, 'Cannot retrieve labels from graph prior to initialization.'
+        return self._graph.ndata['label']
+
     def _validate(self) -> None:
         self._check_matching_node_edge_definitions()
         self._check_consistent_node_type_column_pairing()

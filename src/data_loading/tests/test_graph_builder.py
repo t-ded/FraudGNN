@@ -152,7 +152,7 @@ class TestGraphDataset:
         graph_dataset.build_graph(source_tabular_data=self._dataset.ldf)
 
         assert graph_dataset.graph is not None
-        np.testing.assert_array_equal(graph_dataset.graph.ndata['label']['transaction'].flatten(), labels)
+        np.testing.assert_array_equal(graph_dataset.labels['transaction'].flatten(), labels)
 
     def test_graph_update_connections(self) -> None:
         graph_dataset = GraphDataset(
@@ -237,7 +237,7 @@ class TestGraphDataset:
         graph_dataset.update_graph(incr)
 
         assert graph_dataset.graph is not None
-        np.testing.assert_array_equal(graph_dataset.graph.ndata['label']['transaction'].flatten(), [1, 1, 1, 1, 1, 0, 0, 0])
+        np.testing.assert_array_equal(graph_dataset.labels['transaction'].flatten(), [1, 1, 1, 1, 1, 0, 0, 0])
 
     def test_graph_update_old_nodes_new_features(self) -> None:
         rnd_feature = np.random.rand(self._dataset.df.height)
@@ -299,7 +299,7 @@ class TestGraphDataset:
         graph_dataset.update_graph(incr)
 
         assert graph_dataset.graph is not None
-        np.testing.assert_array_equal(graph_dataset.graph.ndata['label']['transaction'].flatten(), [1, 0, 0, 0, 0])
+        np.testing.assert_array_equal(graph_dataset.labels['transaction'].flatten(), [1, 0, 0, 0, 0])
 
     def test_conversion_to_homogeneous(self) -> None:
         labels = np.ones(self._dataset.df.height)
