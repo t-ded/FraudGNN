@@ -14,7 +14,6 @@ class GraphDatasetDefinition:
     node_feature_cols: dict[str, list[str]]
     node_label_cols: dict[str, str]
     edge_definitions: dict[tuple[str, str, str], tuple[str, str]]
-    batch_size: int
 
 
 class GraphDataset:

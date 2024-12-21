@@ -42,7 +42,6 @@ class TestGraphDataset:
                     edge_definitions={
                         ('customer', 'makes', 'transaction'): ('test_customer', 'test_id'),
                     },
-                    batch_size=64,
                 ),
             )
 
@@ -56,7 +55,6 @@ class TestGraphDataset:
                         ('customer', 'makes', 'transaction'): ('test_customer', 'test_id'),
                         ('customer', 'does', 'transaction'): ('test_counterparty', 'test_id'),
                     },
-                    batch_size=64,
                 ),
             )
 
@@ -70,7 +68,6 @@ class TestGraphDataset:
                         ('customer', 'makes', 'tx'): ('test_customer', 'test_id'),
                         ('customer', 'makes', 'transaction'): ('test_customer', 'test_id'),
                     },
-                    batch_size=64,
                 ),
             )
 
@@ -83,7 +80,6 @@ class TestGraphDataset:
                     edge_definitions={
                         ('customer', 'makes', 'transaction'): ('test_customer', 'test_id'),
                     },
-                    batch_size=64,
                 ),
             )
 
@@ -98,7 +94,6 @@ class TestGraphDataset:
                     ('customer', 'sends', 'transaction'): ('test_customer', 'test_id'),
                     ('transaction', 'sent_to', 'counterparty'): ('test_id', 'test_counterparty'),
                 },
-                batch_size=64,
             ),
         )
         graph_dataset.build_graph(source_tabular_data=self._dataset.ldf)
@@ -125,7 +120,6 @@ class TestGraphDataset:
                     ('customer', 'sends', 'transaction'): ('test_customer', 'test_id'),
                     ('transaction', 'sent_to', 'counterparty'): ('test_id', 'test_counterparty'),
                 },
-                batch_size=64,
             ),
         )
         graph_dataset.build_graph(source_tabular_data=self._dataset.ldf)
@@ -153,7 +147,6 @@ class TestGraphDataset:
                 edge_definitions={
                     ('customer', 'sends', 'transaction'): ('test_customer', 'test_id')
                 },
-                batch_size=64,
             ),
         )
         graph_dataset.build_graph(source_tabular_data=self._dataset.ldf)
@@ -170,7 +163,6 @@ class TestGraphDataset:
                     ('customer', 'sends', 'transaction'): ('test_customer', 'test_id'),
                     ('transaction', 'sent_to', 'counterparty'): ('test_id', 'test_counterparty'),
                 },
-                batch_size=64,
             ),
         )
         graph_dataset.build_graph(source_tabular_data=self._dataset.ldf)
@@ -200,7 +192,6 @@ class TestGraphDataset:
                     ('customer', 'sends', 'transaction'): ('test_customer', 'test_id'),
                     ('transaction', 'sent_to', 'counterparty'): ('test_id', 'test_counterparty'),
                 },
-                batch_size=64,
             ),
         )
         graph_dataset.build_graph(source_tabular_data=self._dataset.ldf)
@@ -238,7 +229,6 @@ class TestGraphDataset:
                 edge_definitions={
                     ('customer', 'sends', 'transaction'): ('test_customer', 'test_id'),
                 },
-                batch_size=64,
             ),
         )
         graph_dataset.build_graph(source_tabular_data=self._dataset.ldf)
@@ -264,7 +254,6 @@ class TestGraphDataset:
                     ('customer', 'sends', 'transaction'): ('test_customer', 'test_id'),
                     ('transaction', 'sent_to', 'counterparty'): ('test_id', 'test_counterparty'),
                 },
-                batch_size=64,
             ),
         )
         graph_dataset.build_graph(source_tabular_data=self._dataset.ldf)
@@ -302,7 +291,6 @@ class TestGraphDataset:
                 edge_definitions={
                     ('customer', 'sends', 'transaction'): ('test_customer', 'test_id'),
                 },
-                batch_size=64,
             ),
         )
         graph_dataset.build_graph(source_tabular_data=self._dataset.ldf)
@@ -330,7 +318,6 @@ class TestGraphDataset:
                     ('customer', 'sends', 'transaction'): ('test_customer', 'test_id'),
                     ('transaction', 'sent_to', 'counterparty'): ('test_id', 'test_counterparty'),
                 },
-                batch_size=64,
             ),
         )
         graph_dataset.build_graph(source_tabular_data=self._dataset.ldf)
