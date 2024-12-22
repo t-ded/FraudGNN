@@ -42,6 +42,7 @@ class TestGraphDataset:
                     edge_definitions={
                         ('customer', 'makes', 'transaction'): ('test_customer', 'test_id'),
                     },
+                    unique_cols={'test_id'},
                 ),
             )
 
@@ -55,6 +56,7 @@ class TestGraphDataset:
                         ('customer', 'makes', 'transaction'): ('test_customer', 'test_id'),
                         ('customer', 'does', 'transaction'): ('test_counterparty', 'test_id'),
                     },
+                    unique_cols={'test_id'},
                 ),
             )
 
@@ -68,6 +70,7 @@ class TestGraphDataset:
                         ('customer', 'makes', 'tx'): ('test_customer', 'test_id'),
                         ('customer', 'makes', 'transaction'): ('test_customer', 'test_id'),
                     },
+                    unique_cols={'test_id'},
                 ),
             )
 
@@ -80,6 +83,7 @@ class TestGraphDataset:
                     edge_definitions={
                         ('customer', 'makes', 'transaction'): ('test_customer', 'test_id'),
                     },
+                    unique_cols={'test_id'},
                 ),
             )
 
@@ -94,6 +98,7 @@ class TestGraphDataset:
                     ('customer', 'sends', 'transaction'): ('test_customer', 'test_id'),
                     ('transaction', 'sent_to', 'counterparty'): ('test_id', 'test_counterparty'),
                 },
+                unique_cols={'test_id'},
             ),
         )
         graph_dataset.build_graph(source_tabular_data=self._dataset.ldf)
@@ -120,6 +125,7 @@ class TestGraphDataset:
                     ('customer', 'sends', 'transaction'): ('test_customer', 'test_id'),
                     ('transaction', 'sent_to', 'counterparty'): ('test_id', 'test_counterparty'),
                 },
+                unique_cols={'test_id'},
             ),
         )
         graph_dataset.build_graph(source_tabular_data=self._dataset.ldf)
@@ -147,6 +153,7 @@ class TestGraphDataset:
                 edge_definitions={
                     ('customer', 'sends', 'transaction'): ('test_customer', 'test_id')
                 },
+                unique_cols={'test_id'},
             ),
         )
         graph_dataset.build_graph(source_tabular_data=self._dataset.ldf)
@@ -163,6 +170,7 @@ class TestGraphDataset:
                     ('customer', 'sends', 'transaction'): ('test_customer', 'test_id'),
                     ('transaction', 'sent_to', 'counterparty'): ('test_id', 'test_counterparty'),
                 },
+                unique_cols={'test_id'},
             ),
         )
         graph_dataset.build_graph(source_tabular_data=self._dataset.ldf)
@@ -192,6 +200,7 @@ class TestGraphDataset:
                     ('customer', 'sends', 'transaction'): ('test_customer', 'test_id'),
                     ('transaction', 'sent_to', 'counterparty'): ('test_id', 'test_counterparty'),
                 },
+                unique_cols={'test_id'},
             ),
         )
         graph_dataset.build_graph(source_tabular_data=self._dataset.ldf)
@@ -229,6 +238,7 @@ class TestGraphDataset:
                 edge_definitions={
                     ('customer', 'sends', 'transaction'): ('test_customer', 'test_id'),
                 },
+                unique_cols={'test_id'},
             ),
         )
         graph_dataset.build_graph(source_tabular_data=self._dataset.ldf)
@@ -254,6 +264,7 @@ class TestGraphDataset:
                     ('customer', 'sends', 'transaction'): ('test_customer', 'test_id'),
                     ('transaction', 'sent_to', 'counterparty'): ('test_id', 'test_counterparty'),
                 },
+                unique_cols={'test_id'},
             ),
         )
         graph_dataset.build_graph(source_tabular_data=self._dataset.ldf)
@@ -291,6 +302,7 @@ class TestGraphDataset:
                 edge_definitions={
                     ('customer', 'sends', 'transaction'): ('test_customer', 'test_id'),
                 },
+                unique_cols={'test_id'},
             ),
         )
         graph_dataset.build_graph(source_tabular_data=self._dataset.ldf)
@@ -318,6 +330,7 @@ class TestGraphDataset:
                     ('customer', 'sends', 'transaction'): ('test_customer', 'test_id'),
                     ('transaction', 'sent_to', 'counterparty'): ('test_id', 'test_counterparty'),
                 },
+                unique_cols={'test_id'},
             ),
         )
         graph_dataset.build_graph(source_tabular_data=self._dataset.ldf)

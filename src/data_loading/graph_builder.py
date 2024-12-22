@@ -14,6 +14,7 @@ class GraphDatasetDefinition:
     node_feature_cols: dict[str, list[str]]
     node_label_cols: dict[str, str]
     edge_definitions: dict[tuple[str, str, str], tuple[str, str]]
+    unique_cols: set[str]
 
 
 class GraphDataset:
@@ -23,6 +24,7 @@ class GraphDataset:
         self._node_feature_cols = graph_dataset_definition.node_feature_cols
         self._node_label_cols = graph_dataset_definition.node_label_cols
         self._edge_definitions = graph_dataset_definition.edge_definitions
+        self._unique_cols = graph_dataset_definition.unique_cols
 
         self._node_type_to_column_name_mapping: dict[str, str] = {}
         self._column_name_to_node_type_mapping: dict[str, str] = {}
@@ -124,12 +126,16 @@ class GraphDataset:
         for node_col, node_feature_cols in self._node_feature_cols.items():
             node_type = self._column_name_to_node_type_mapping[node_col]
             for feature_col in node_feature_cols:
+                if node_col not in self._unique_cols:
+                    source_tabular_data = source_tabular_data.unique(node_col, maintain_order=True)
                 self._graph.nodes[node_type].data[feature_col] = source_tabular_data.select(feature_col).collect().to_torch()
 
     def _enrich_with_labels(self, source_tabular_data: pl.LazyFrame) -> None:
         assert isinstance(self._graph, dgl.DGLGraph), 'Can only enrich with labels after graph has been initialized.'
         for node_col, label_col in self._node_label_cols.items():
             node_type = self._column_name_to_node_type_mapping[node_col]
+            if node_col not in self._unique_cols:
+                source_tabular_data = source_tabular_data.unique(node_col, maintain_order=True)
             self._graph.nodes[node_type].data[label_col] = source_tabular_data.select(label_col).collect().to_torch().long()
 
     def update_graph(self, incr: pl.DataFrame) -> None:
@@ -175,6 +181,9 @@ class GraphDataset:
 
     def _get_new_data_update_old_data(self, node_type: str, node_defining_col: str, incr: pl.DataFrame) -> dict[str, torch.Tensor]:
         assert isinstance(self._graph, dgl.DGLGraph), 'Can only update graph after graph has been initialized.'
+
+        if node_defining_col not in self._unique_cols:
+            incr = incr.unique(node_defining_col, maintain_order=True)
 
         incr_new = incr.filter(pl.col('is_new_node_mask'))
         incr_old = incr.filter(~pl.col('is_new_node_mask'))

@@ -37,6 +37,7 @@ class TestDynamicDataset:
                 edge_definitions={
                     ('customer', 'makes', 'transaction'): ('test_customer', 'test_id'),
                 },
+                unique_cols={'test_id'},
             ),
             preprocess_tabular=False,
         )

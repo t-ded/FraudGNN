@@ -57,6 +57,7 @@ class TestEvaluator:
                 ('transaction', 'sent_to', 'counterparty'): ('test_id', 'test_counterparty'),
                 ('counterparty', 'same_id_as', 'customer'): ('test_counterparty', 'test_customer'),
             },
+            unique_cols={'test_id'},
         )
         self._model = NaiveRGCN(1, 2, 1, [key[1] for key in graph_definition.edge_definitions.keys()])
 
