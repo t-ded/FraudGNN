@@ -1,6 +1,6 @@
 import logging
 from dataclasses import dataclass
-from typing import Optional, Any, cast, Iterator
+from typing import Optional, Any, cast, Iterator, Literal
 
 import dgl
 import polars as pl
@@ -33,6 +33,7 @@ class GraphDataset:
 
         self._value_node_id_mapping: dict[str, dict[Any, int]] = {}
         self._graph: Optional[dgl.DGLGraph] = None
+        self._features: dict[str, torch.Tensor] = {}
 
     @property
     def graph(self) -> Optional[dgl.DGLGraph]:
@@ -41,11 +42,15 @@ class GraphDataset:
     @property
     def labels(self) -> dict[str, torch.Tensor]:
         assert self._graph is not None, 'Cannot retrieve labels from graph prior to initialization.'
-        return self._graph.ndata['label']
+        return self._graph.ndata[list(self._node_label_cols.values())[0]]
 
     @property
     def node_label_cols(self) -> dict[str, str]:
         return self._node_label_cols
+
+    @property
+    def node_features(self) -> dict[str, torch.Tensor]:
+        return self._features
 
     def _validate(self) -> None:
         self._check_matching_node_edge_definitions()
@@ -128,7 +133,14 @@ class GraphDataset:
             for feature_col in node_feature_cols:
                 if node_col not in self._unique_cols:
                     source_tabular_data = source_tabular_data.unique(node_col, maintain_order=True)
-                self._graph.nodes[node_type].data[feature_col] = source_tabular_data.select(feature_col).collect().to_torch()
+                self._update_ntype_with_features(node_type, source_tabular_data.select(feature_col).collect().to_torch().type(torch.float32), 'build')
+
+    def _update_ntype_with_features(self, ntype: str, feature_values: torch.Tensor, update_type: Literal['build', 'update']) -> None:
+        dim = 1 if update_type == 'build' else 0
+        if ntype not in self._features:
+            self._features[ntype] = feature_values
+        else:
+            self._features[ntype] = torch.cat((self._features[ntype], feature_values), dim=dim)
 
     def _enrich_with_labels(self, source_tabular_data: pl.LazyFrame) -> None:
         assert isinstance(self._graph, dgl.DGLGraph), 'Can only enrich with labels after graph has been initialized.'
@@ -187,30 +199,35 @@ class GraphDataset:
 
         incr_new = incr.filter(pl.col('is_new_node_mask'))
         incr_old = incr.filter(~pl.col('is_new_node_mask'))
+        old_nodes_ids = incr_old.select(node_defining_col).to_torch().flatten()
 
-        old_nodes_ids = incr_old.select(node_defining_col).to_torch()
-        new_nodes_data: dict[str, torch.Tensor] = {}
+        num_new = len(incr_new)
+        num_features_for_this_node_type = len(self._node_feature_cols[node_defining_col])
+        new_nodes_data: torch.Tensor = torch.empty((num_new, num_features_for_this_node_type), dtype=torch.float32)
+
+        label_data: dict[str, torch.Tensor] = {}
         label_col = self._node_label_cols.get(node_defining_col)
 
         if len(old_nodes_ids) > 0:
 
-            for feature_col in self._node_feature_cols[node_defining_col]:
-                self._graph.nodes[node_type].data[feature_col][old_nodes_ids] = incr_old.select(feature_col).to_torch()
-                new_nodes_data[feature_col] = incr_new.select(feature_col).to_torch()
+            for nth_feature, feature_col in enumerate(self._node_feature_cols[node_defining_col]):
+                self._features[node_type][old_nodes_ids, nth_feature] = incr_old.select(feature_col).to_torch().type(torch.float32)
+                new_nodes_data[:, nth_feature] = incr_new.select(feature_col).to_torch().type(torch.float32).flatten()
 
             if label_col is not None:
                 self._graph.nodes[node_type].data[label_col][old_nodes_ids] = incr_old.select(label_col).to_torch()
-                new_nodes_data[label_col] = incr_new.select(label_col).to_torch()
+                label_data[label_col] = incr_new.select(label_col).to_torch()
 
         else:
 
-            for feature_col in self._node_feature_cols[node_defining_col]:
-                new_nodes_data[feature_col] = incr_new.select(feature_col).to_torch()
+            for nth_feature, feature_col in enumerate(self._node_feature_cols[node_defining_col]):
+                new_nodes_data[:, nth_feature] = incr_new.select(feature_col).to_torch().type(torch.float32).flatten()
 
             if label_col is not None:
-                new_nodes_data[label_col] = incr_new.select(label_col).to_torch()
+                label_data[label_col] = incr_new.select(label_col).to_torch()
 
-        return new_nodes_data
+        self._update_ntype_with_features(node_type, new_nodes_data, 'update')
+        return label_data
 
     def _update_edges_from_incr(self, incr: pl.DataFrame) -> None:
         assert isinstance(self._graph, dgl.DGLGraph), 'Can only update graph after graph has been initialized.'
@@ -236,10 +253,9 @@ class GraphDataset:
 
             ntype_col = self._node_type_to_column_name_mapping[ntype]
             ntype_num_nodes = self._graph.num_nodes(ntype)
-
-            for feature_col in self._node_feature_cols[ntype_col]:
-                homogeneous_features[node_idx : node_idx + ntype_num_nodes, feature_idx] = self._graph.nodes[ntype].data[feature_col].squeeze(1)
-                feature_idx += 1
+            ntype_features = self._features[ntype]
+            homogeneous_features[node_idx : node_idx + ntype_num_nodes, feature_idx : feature_idx + ntype_features.shape[1]] = ntype_features
+            feature_idx += ntype_features.shape[1]
 
             label_col = self._node_label_cols.get(ntype_col)
             if label_col is not None:

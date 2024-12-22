@@ -62,7 +62,7 @@ class Evaluator:
         assert self._dynamic_dataset.graph is not None, 'Graph should be initialized by this point!'
         logger.info('Starting the training process...')
 
-        for epoch in range(num_epochs):
+        for epoch in tqdm(range(num_epochs), desc='Training...'):
             self._model.train()
 
             label_col = 'transaction'  # TODO: Generalize this
@@ -118,7 +118,7 @@ class Evaluator:
         final_metrics = EvaluationMetrics(number_of_samples=0, total_loss=0.0)
         streaming_batches = self._dynamic_dataset.get_streaming_batches(ldf, self._hyperparameters.batch_size)
 
-        for incr in tqdm(streaming_batches, desc='Evaluating'):
+        for incr in tqdm(streaming_batches, desc='Evaluating...'):
             metrics = self._validate_on_increment(incr.collect(), compute_metrics)
             final_metrics.total_loss += metrics['loss']
             final_metrics.number_of_samples += int(metrics['n_labelled_samples'])
