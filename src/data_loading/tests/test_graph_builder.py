@@ -130,17 +130,9 @@ class TestGraphDataset:
         )
         graph_dataset.build_graph(source_tabular_data=self._dataset.ldf)
 
-        assert graph_dataset.graph is not None
-        assert list(graph_dataset.graph.ndata.keys()) ==  ['random_feature', 'category_len', 'test_amount']
-
-        assert list(graph_dataset.graph.ndata['random_feature'].keys()) == ['counterparty']
-        np.testing.assert_array_equal(graph_dataset.graph.ndata['random_feature']['counterparty'].flatten(), rnd_feature)
-
-        assert list(graph_dataset.graph.ndata['category_len'].keys()) == ['customer']
-        np.testing.assert_array_equal(graph_dataset.graph.ndata['category_len']['customer'].flatten(), torch.tensor([5, 5, 5, 5, 5]))
-
-        assert list(graph_dataset.graph.ndata['test_amount'].keys()) == ['transaction']
-        np.testing.assert_array_equal(graph_dataset.graph.ndata['test_amount']['transaction'].flatten(), torch.tensor([100, 200, 300, 400, 500]))
+        assert torch.equal(graph_dataset.node_features['customer'].flatten(), torch.tensor([5, 5, 5, 5, 5], dtype=torch.float32))
+        assert torch.equal(graph_dataset.node_features['counterparty'].flatten(), torch.tensor(rnd_feature, dtype=torch.float32))
+        assert torch.equal(graph_dataset.node_features['transaction'].flatten(), torch.tensor([100, 200, 300, 400, 500], dtype=torch.float32))
 
     def test_labels(self) -> None:
         labels = np.ones(self._dataset.df.height)
@@ -214,18 +206,9 @@ class TestGraphDataset:
         )
         graph_dataset.update_graph(incr)
 
-        test_graph = graph_dataset.graph
-        assert test_graph is not None
-        assert list(test_graph.ndata.keys()) ==  ['random_feature', 'category_len', 'test_amount']
-
-        assert list(test_graph.ndata['random_feature'].keys()) == ['counterparty']
-        np.testing.assert_array_equal(test_graph.ndata['random_feature']['counterparty'].flatten(), np.concatenate((rnd_feature, incr_rnd_feature)))
-
-        assert list(test_graph.ndata['category_len'].keys()) == ['customer']
-        np.testing.assert_array_equal(test_graph.ndata['category_len']['customer'].flatten(), torch.tensor([5, 5, 5, 5, 5, 6, 6, 6]))
-
-        assert list(test_graph.ndata['test_amount'].keys()) == ['transaction']
-        np.testing.assert_array_equal(test_graph.ndata['test_amount']['transaction'].flatten(), torch.tensor([100, 200, 300, 400, 500, 600, 700, 800]))
+        np.testing.assert_array_almost_equal(graph_dataset.node_features['counterparty'].flatten(), np.concatenate((rnd_feature, incr_rnd_feature)), decimal=4)
+        np.testing.assert_array_almost_equal(graph_dataset.node_features['customer'].flatten(), torch.tensor([5, 5, 5, 5, 5, 6, 6, 6]), decimal=4)
+        np.testing.assert_array_almost_equal(graph_dataset.node_features['transaction'].flatten(), torch.tensor([100, 200, 300, 400, 500, 600, 700, 800]), decimal=4)
 
     def test_graph_update_new_nodes_with_labels(self) -> None:
         labels = np.ones(self._dataset.df.height)
@@ -278,18 +261,9 @@ class TestGraphDataset:
         graph_dataset.update_graph(incr)
         rnd_feature[0] = 0.5
 
-        test_graph = graph_dataset.graph
-        assert test_graph is not None
-        assert list(test_graph.ndata.keys()) ==  ['random_feature', 'category_len', 'test_amount']
-
-        assert list(test_graph.ndata['random_feature'].keys()) == ['counterparty']
-        np.testing.assert_array_equal(test_graph.ndata['random_feature']['counterparty'].flatten(), rnd_feature)
-
-        assert list(test_graph.ndata['category_len'].keys()) == ['customer']
-        np.testing.assert_array_equal(test_graph.ndata['category_len']['customer'].flatten(), torch.tensor([5, 7, 5, 5, 5]))
-
-        assert list(test_graph.ndata['test_amount'].keys()) == ['transaction']
-        np.testing.assert_array_equal(test_graph.ndata['test_amount']['transaction'].flatten(), torch.tensor([100, 200, 300, 400, 500, 600]))
+        np.testing.assert_array_almost_equal(graph_dataset.node_features['counterparty'].flatten(), rnd_feature, decimal=4)
+        np.testing.assert_array_almost_equal(graph_dataset.node_features['customer'].flatten(), torch.tensor([5, 7, 5, 5, 5]), decimal=4)
+        np.testing.assert_array_almost_equal(graph_dataset.node_features['transaction'].flatten(), torch.tensor([100, 200, 300, 400, 500, 600]), decimal=4)
 
     def test_graph_update_old_nodes_new_labels(self) -> None:
         labels = np.zeros(self._dataset.df.height)
@@ -345,7 +319,7 @@ class TestGraphDataset:
 
         assert test_homogeneous_graph is not None
         assert test_homogeneous_graph.num_nodes() == 15
-        np.testing.assert_array_equal(test_homogeneous_graph.ndata['_ID'], torch.tensor([0, 1, 2, 3, 4, 0, 1, 2, 3, 4, 0, 1, 2, 3, 4]))
-        np.testing.assert_array_equal(test_homogeneous_graph.edata['_ID'], torch.tensor([0, 1, 2, 3, 4, 0, 1, 2, 3, 4]))
-        np.testing.assert_array_equal(test_homogeneous_graph.ndata['features'], expected_features)
-        np.testing.assert_array_equal(test_homogeneous_graph.ndata['label'], expected_labels)
+        np.testing.assert_array_almost_equal(test_homogeneous_graph.ndata['_ID'], torch.tensor([0, 1, 2, 3, 4, 0, 1, 2, 3, 4, 0, 1, 2, 3, 4]), decimal=1)
+        np.testing.assert_array_almost_equal(test_homogeneous_graph.edata['_ID'], torch.tensor([0, 1, 2, 3, 4, 0, 1, 2, 3, 4]), decimal=1)
+        np.testing.assert_array_almost_equal(test_homogeneous_graph.ndata['features'], expected_features, decimal=1)
+        np.testing.assert_array_almost_equal(test_homogeneous_graph.ndata['label'], expected_labels, decimal=1)

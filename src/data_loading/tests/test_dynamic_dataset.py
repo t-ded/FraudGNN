@@ -47,8 +47,7 @@ class TestDynamicDataset:
         assert test_graph is not None
         assert test_graph.num_nodes() == 6
         np.testing.assert_array_equal(test_graph.edges(etype='makes'), (torch.tensor([0, 1, 2]), torch.tensor([0, 1, 2])))
-        assert list(test_graph.ndata['test_amount'].keys()) == ['transaction']
-        np.testing.assert_array_equal(test_graph.ndata['test_amount']['transaction'].flatten(), torch.tensor([100, 200, 300]))
+        np.testing.assert_array_equal(self._dataset.graph_features['transaction'].flatten(), torch.tensor([100, 200, 300]))
 
     def test_get_streaming_batches(self) -> None:
         dataset_type_enum = pl.Enum(['train', 'val', 'test'])
