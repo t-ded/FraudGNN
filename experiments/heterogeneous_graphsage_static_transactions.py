@@ -53,7 +53,7 @@ if __name__ == '__main__':
         identifier='HeterogeneousGraphSAGE',
     )
 
-    evaluator.train(1)
+    evaluator.train(10)
     validation_results = evaluator.stream_evaluate('validation')
     test_results = evaluator.stream_evaluate('testing')
     print(validation_results)

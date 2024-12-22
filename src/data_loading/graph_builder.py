@@ -211,7 +211,7 @@ class GraphDataset:
         if len(old_nodes_ids) > 0:
 
             for nth_feature, feature_col in enumerate(self._node_feature_cols[node_defining_col]):
-                self._features[node_type][old_nodes_ids, nth_feature] = incr_old.select(feature_col).to_torch().type(torch.float32)
+                self._features[node_type][old_nodes_ids, nth_feature] = incr_old.select(feature_col).to_torch().type(torch.float32).flatten()
                 new_nodes_data[:, nth_feature] = incr_new.select(feature_col).to_torch().type(torch.float32).flatten()
 
             if label_col is not None:
