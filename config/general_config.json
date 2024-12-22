@@ -1,4 +1,5 @@
 {
   "data_path": "data",
-  "test_data_path": "data/test_data"
+  "test_data_path": "data/test_data",
+  "processed_data_path": "data/processed_data"
 }

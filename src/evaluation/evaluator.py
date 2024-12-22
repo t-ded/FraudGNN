@@ -31,11 +31,16 @@ class Evaluator:
     def __init__(
             self, model: nn.Module, hyperparameters: GNNHyperparameters,
             tabular_dataset_definition: TabularDatasetDefinition, graph_dataset_definition: GraphDatasetDefinition,
-            identifier: str = 'GNNEvaluation',
+            preprocess_tabular: bool = True, identifier: str = 'GNNEvaluation',
     ) -> None:
         self._model = model
         self._hyperparameters = hyperparameters
-        self._dynamic_dataset = DynamicDataset(name=identifier + 'DynamicDataset', tabular_dataset_definition=tabular_dataset_definition, graph_dataset_definition=graph_dataset_definition)
+        self._dynamic_dataset = DynamicDataset(
+            name=identifier + 'DynamicDataset',
+            tabular_dataset_definition=tabular_dataset_definition,
+            graph_dataset_definition=graph_dataset_definition,
+            preprocess_tabular=preprocess_tabular,
+        )
 
         self._criterion = nn.BCEWithLogitsLoss()
         self._optimizer = optim.Adam(self._model.parameters(), lr=self._hyperparameters.learning_rate)
