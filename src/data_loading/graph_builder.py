@@ -59,6 +59,7 @@ class GraphDataset:
         self._check_matching_node_edge_definitions()
         self._check_consistent_node_type_column_pairing()
         self._check_all_node_types_used_in_edgelist()
+        self._check_label_cols()
 
     def _check_matching_node_edge_definitions(self) -> None:
         for edge_description, edge_definition in self._edge_definitions.items():
@@ -102,6 +103,10 @@ class GraphDataset:
         for node_without_edges in node_definitions_without_edge:
             logger.warning(f'Nodes defined by column {node_without_edges} do not have any edges defined for them, will ignore these.')
             self._node_defining_cols.remove(node_without_edges)
+
+    def _check_label_cols(self) -> None:
+        for node_col, label_col in self._node_label_cols.items():
+            assert node_col in self._column_name_to_node_type_mapping, f'Node column {node_col} does not have a node type assigned to it via edgelist occurrence.'
 
     def get_ntype_for_column_name(self, column_name: str) -> str:
         return self._column_name_to_node_type_mapping[column_name]

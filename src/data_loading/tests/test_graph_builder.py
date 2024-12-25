@@ -89,6 +89,19 @@ class TestGraphDataset:
 
         assert 'Nodes defined by column test_counterparty do not have any edges defined for them, will ignore these.' in caplog.text
 
+    def test_raises_on_label_col_without_node_definition(self) -> None:
+        with pytest.raises(AssertionError, match='Node column test_counterparty does not have a node type assigned to it via edgelist occurrence.'):
+            GraphDataset(
+                GraphDatasetDefinition(
+                    node_feature_cols={'test_id': [], 'test_customer': [], 'test_counterparty': []},
+                    node_label_cols={'test_counterparty': 'label'},
+                    edge_definitions={
+                        ('customer', 'makes', 'tx'): ('test_customer', 'test_id'),
+                    },
+                    unique_cols={'test_id'},
+                ),
+            )
+
     def test_basic_connectivity_build(self) -> None:
         graph_dataset = GraphDataset(
             GraphDatasetDefinition(
