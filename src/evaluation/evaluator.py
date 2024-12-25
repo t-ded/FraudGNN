@@ -82,11 +82,9 @@ class Evaluator:
         assert self._dynamic_dataset.graph is not None, 'Graph should be initialized by this point!'
 
         metrics: dict[str, float] = {}
+        incr_len = len(incr)
 
-        mask = torch.cat((
-            *[torch.zeros(self._dynamic_dataset.graph.num_nodes(label_node)) for label_node in self._label_nodes],
-            torch.ones(len(incr)),
-        )).type(torch.bool)
+        mask = self._get_incr_mask(incr_len)
         self._dynamic_dataset.update_graph_with_increment(incr)
 
         with torch.no_grad():
@@ -100,7 +98,15 @@ class Evaluator:
                 # TODO: Compute evaluation metrics
                 pass
 
-        return {'loss': loss.item(), 'n_labelled_samples': len(labels)} | metrics
+        return {'loss': loss.item(), 'n_labelled_samples': incr_len} | metrics
+
+    def _get_incr_mask(self, incr_len: int) -> torch.Tensor:
+        assert self._dynamic_dataset.graph is not None, 'Graph should be initialized by this point!'
+
+        return torch.cat((
+            *(torch.zeros(self._dynamic_dataset.graph.num_nodes(label_node)) for label_node in self._label_nodes),
+            torch.ones(incr_len),
+        )).type(torch.bool)
 
     def stream_evaluate(self, mode: Literal['validation', 'testing']) -> EvaluationMetrics:
         assert self._dynamic_dataset.graph is not None, 'Graph should be initialized by this point!'
