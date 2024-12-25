@@ -17,6 +17,7 @@ from src.data_loading.dynamic_dataset import DynamicDataset
 from src.data_loading.graph_builder import GraphDatasetDefinition
 from src.data_loading.tabular_dataset import TabularDatasetDefinition
 
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 
@@ -66,6 +67,17 @@ class EvaluationMetricsComputer:
         self._logits = torch.cat((other._logits, self._logits), dim=0)
         self._labels = torch.cat((other._labels, self._labels), dim=0)
 
+    def print_summary(self, loss_func: nn.Module = nn.BCEWithLogitsLoss()) -> None:
+        print()
+        print('-' * 25)
+        print(f'Evaluation Summary:')
+        print(f'- Number of samples: {self.num_samples}')
+        print(f'- Precision: {self.precision:.4f}')
+        print(f'- Recall: {self.recall:.4f}')
+        print(f'- Total {'BCE' if not loss_func else ''} loss: {self.total_loss(loss_func):.4f}')
+        print('-' * 25)
+        print()
+
 
 class Evaluator:
 
@@ -84,7 +96,12 @@ class Evaluator:
         )
         self._label_nodes = [self._dynamic_dataset.graph_dataset.get_ntype_for_column_name(col) for col in self._dynamic_dataset.graph_dataset.node_label_cols.keys()]
 
-        self._criterion = nn.BCEWithLogitsLoss()
+        self._criterion = nn.BCEWithLogitsLoss(
+            pos_weight=torch.tensor(
+                [self._dynamic_dataset.tabular_dataset.imbalance_ratio(col)
+                 for col in graph_dataset_definition.node_label_cols.values()]
+            ).mean()
+        )
         self._optimizer = optim.Adam(self._model.parameters(), lr=self._hyperparameters.learning_rate)
 
         self._device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -99,6 +116,10 @@ class Evaluator:
     @property
     def dynamic_dataset(self) -> DynamicDataset:
         return self._dynamic_dataset
+
+    @property
+    def criterion(self) -> nn.BCEWithLogitsLoss:
+        return self._criterion
 
     def train(self, num_epochs: int, plot_loss: bool = False) -> None:
         assert self._dynamic_dataset.graph is not None, 'Graph should be initialized by this point!'
@@ -120,7 +141,7 @@ class Evaluator:
             self._optimizer.step()
 
             losses_per_epoch.append(loss.item())
-            logger.info(f'Epoch {epoch + 1}/{num_epochs} - Loss: {loss.item()}')
+            logger.info(f'\nEpoch {epoch + 1}/{num_epochs} - Loss: {loss.item()}')
 
         if plot_loss:
             plt.plot(range(1, num_epochs + 1), losses_per_epoch, marker='o')
@@ -153,16 +174,18 @@ class Evaluator:
             mask[label_node] = torch.cat((torch.zeros(ntype_num_nodes), torch.ones(len(incr)))).type(torch.bool)
         return mask
 
-    def stream_evaluate(self, mode: Literal['validation', 'testing'], plot_pr_curve: bool = False) -> EvaluationMetricsComputer:
+    def stream_evaluate(self, mode: Literal['validation', 'testing'], compute_metrics: Optional[bool] = None, plot_pr_curve: bool = False) -> EvaluationMetricsComputer:
         assert self._dynamic_dataset.graph is not None, 'Graph should be initialized by this point!'
 
         if mode == 'validation':
             logger.info('Starting the validation process...')
-            compute_metrics = False
+            if compute_metrics is None:
+                compute_metrics = False
             ldf = self._dynamic_dataset.tabular_dataset.val_ldf
         elif mode == 'testing':
             logger.info('Starting the testing process...')
-            compute_metrics = True
+            if compute_metrics is None:
+                compute_metrics = True
             ldf = self._dynamic_dataset.tabular_dataset.test_ldf
         else:
             raise ValueError('Invalid mode of evaluation.')
@@ -183,7 +206,7 @@ class Evaluator:
 
             if plot_pr_curve:
                 precision, recall, _ = precision_recall_curve(final_metrics.labels_np, final_metrics.probabilities)
-                plt.plot(recall, precision, marker='.')
+                plt.plot(recall, precision, color='red' if mode == 'testing' else 'orange')
                 plt.xlabel('Recall')
                 plt.ylabel('Precision')
                 plt.title('Precision-Recall Curve')

@@ -95,5 +95,9 @@ class TabularDataset:
     def test_ldf(self) -> pl.LazyFrame:
         return self._ldf.filter((pl.col('train_val_test_mask') == 'test'))
 
+    def imbalance_ratio(self, col: str) -> float:
+        grouping = self.train_ldf.group_by(col).agg(pl.len()).collect()
+        return grouping.filter((pl.col(col) == False)).select(pl.col('len')).item() / grouping.filter((pl.col(col) == True)).select(pl.col('len')).item()
+
     def with_columns(self, *exprs: IntoExpr | Iterable[IntoExpr]) -> None:
         self._ldf = self._ldf.with_columns(*exprs)

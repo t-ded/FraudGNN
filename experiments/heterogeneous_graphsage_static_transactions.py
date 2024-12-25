@@ -53,8 +53,8 @@ if __name__ == '__main__':
         identifier='HeterogeneousGraphSAGE',
     )
 
-    evaluator.train(10)
+    evaluator.train(10, plot_loss=True)
     validation_results = evaluator.stream_evaluate('validation')
-    test_results = evaluator.stream_evaluate('testing')
-    print(validation_results)
-    print(test_results)
+    validation_results.print_summary(loss_func=evaluator.criterion)
+    test_results = evaluator.stream_evaluate('testing', plot_pr_curve=True)
+    test_results.print_summary(loss_func=evaluator.criterion)
