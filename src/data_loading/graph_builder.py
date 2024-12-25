@@ -42,7 +42,10 @@ class GraphDataset:
     @property
     def labels(self) -> dict[str, torch.Tensor]:
         assert self._graph is not None, 'Cannot retrieve labels from graph prior to initialization.'
-        return self._graph.ndata[list(self._node_label_cols.values())[0]]
+        labels: dict[str, torch.Tensor] = {}
+        for label_col in self._node_label_cols.values():
+            labels |= self._graph.ndata[label_col]
+        return labels
 
     @property
     def node_label_cols(self) -> dict[str, str]:
@@ -99,6 +102,9 @@ class GraphDataset:
         for node_without_edges in node_definitions_without_edge:
             logger.warning(f'Nodes defined by column {node_without_edges} do not have any edges defined for them, will ignore these.')
             self._node_defining_cols.remove(node_without_edges)
+
+    def get_ntype_for_column_name(self, column_name: str) -> str:
+        return self._column_name_to_node_type_mapping[column_name]
 
     def build_graph(self, source_tabular_data: pl.LazyFrame) -> None:
         source_tabular_data = self._assign_node_ids(source_tabular_data)

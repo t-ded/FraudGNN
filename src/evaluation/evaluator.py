@@ -41,6 +41,7 @@ class Evaluator:
             graph_dataset_definition=graph_dataset_definition,
             preprocess_tabular=preprocess_tabular,
         )
+        self._label_nodes = [self._dynamic_dataset.graph_dataset.get_ntype_for_column_name(col) for col in self._dynamic_dataset.graph_dataset.node_label_cols.keys()]
 
         self._criterion = nn.BCEWithLogitsLoss()
         self._optimizer = optim.Adam(self._model.parameters(), lr=self._hyperparameters.learning_rate)
@@ -65,9 +66,10 @@ class Evaluator:
         for epoch in tqdm(range(num_epochs), desc='Training...'):
             self._model.train()
 
-            label_col = 'transaction'  # TODO: Generalize this
-            logits = self._model(self._dynamic_dataset.graph, self._dynamic_dataset.graph_features)[label_col]
-            labels = self._dynamic_dataset.graph_dataset.labels[label_col].type(torch.float32)
+            logit_dict = self._model(self._dynamic_dataset.graph, self._dynamic_dataset.graph_features)
+            logits = torch.cat([logit_dict[ntype] for ntype in self._label_nodes], dim=0)
+            label_dict = self._dynamic_dataset.graph_dataset.labels
+            labels = torch.cat([label_dict[ntype] for ntype in self._label_nodes], dim=0).type(torch.float32)
             loss = self._criterion(logits, labels)
 
             self._optimizer.zero_grad()
@@ -81,16 +83,17 @@ class Evaluator:
 
         metrics: dict[str, float] = {}
 
-        label_col = 'transaction'  # TODO: Generalize this
         mask = torch.cat((
-            torch.zeros(self._dynamic_dataset.graph.num_nodes(label_col)),
+            *[torch.zeros(self._dynamic_dataset.graph.num_nodes(label_node)) for label_node in self._label_nodes],
             torch.ones(len(incr)),
         )).type(torch.bool)
         self._dynamic_dataset.update_graph_with_increment(incr)
 
         with torch.no_grad():
-            logits = self._model(self._dynamic_dataset.graph, self._dynamic_dataset.graph_features)[label_col][mask]
-            labels = self._dynamic_dataset.graph_dataset.labels[label_col].type(torch.float32)[mask]
+            logit_dict = self._model(self._dynamic_dataset.graph, self._dynamic_dataset.graph_features)
+            logits = torch.cat([logit_dict[ntype] for ntype in self._label_nodes], dim=0)[mask]
+            label_dict = self._dynamic_dataset.graph_dataset.labels
+            labels = torch.cat([label_dict[ntype] for ntype in self._label_nodes], dim=0).type(torch.float32)[mask]
             loss = self._criterion(logits, labels)
 
             if compute_metrics:

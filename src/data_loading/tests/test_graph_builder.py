@@ -323,3 +323,21 @@ class TestGraphDataset:
         np.testing.assert_array_almost_equal(test_homogeneous_graph.edata['_ID'], torch.tensor([0, 1, 2, 3, 4, 0, 1, 2, 3, 4]), decimal=1)
         np.testing.assert_array_almost_equal(test_homogeneous_graph.ndata['features'], expected_features, decimal=1)
         np.testing.assert_array_almost_equal(test_homogeneous_graph.ndata['label'], expected_labels, decimal=1)
+
+    def test_get_ntype_for_column_name(self) -> None:
+        graph_dataset = GraphDataset(
+            GraphDatasetDefinition(
+                node_feature_cols={'test_id': [], 'test_customer': [], 'test_counterparty': []},
+                node_label_cols={},
+                edge_definitions={
+                    ('customer', 'sends', 'transaction'): ('test_customer', 'test_id'),
+                    ('transaction', 'sent_to', 'counterparty'): ('test_id', 'test_counterparty'),
+                },
+                unique_cols={'test_id'},
+            ),
+        )
+        graph_dataset.build_graph(source_tabular_data=self._dataset.ldf)
+
+        assert graph_dataset.get_ntype_for_column_name('test_id') == 'transaction'
+        assert graph_dataset.get_ntype_for_column_name('test_customer') == 'customer'
+        assert graph_dataset.get_ntype_for_column_name('test_counterparty') == 'counterparty'
