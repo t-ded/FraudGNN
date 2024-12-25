@@ -63,6 +63,8 @@ class Evaluator:
         assert self._dynamic_dataset.graph is not None, 'Graph should be initialized by this point!'
         logger.info('Starting the training process...')
 
+        losses_per_epoch = []
+
         for epoch in tqdm(range(num_epochs), desc='Training...'):
             self._model.train()
 
@@ -76,22 +78,24 @@ class Evaluator:
             loss.backward()
             self._optimizer.step()
 
+            losses_per_epoch.append(loss.item())
             logger.info(f'Epoch {epoch + 1}/{num_epochs} - Loss: {loss.item()}')
 
     def _validate_on_increment(self, incr: pl.DataFrame, compute_metrics: bool) -> dict[str, float]:
+        # TODO: For now, assume only transactions will be labelled -> unique node per row of incr, i.e., whole incr is validation set, number of samples is equal to incr length etc.
         assert self._dynamic_dataset.graph is not None, 'Graph should be initialized by this point!'
 
         metrics: dict[str, float] = {}
         incr_len = len(incr)
 
-        mask = self._get_incr_mask(incr_len)
+        mask: dict[str, torch.Tensor] = self._get_incr_mask(incr)
         self._dynamic_dataset.update_graph_with_increment(incr)
 
         with torch.no_grad():
             logit_dict = self._model(self._dynamic_dataset.graph, self._dynamic_dataset.graph_features)
-            logits = torch.cat([logit_dict[ntype] for ntype in self._label_nodes], dim=0)[mask]
+            logits = torch.cat([logit_dict[ntype][mask[ntype]] for ntype in self._label_nodes], dim=0)
             label_dict = self._dynamic_dataset.graph_dataset.labels
-            labels = torch.cat([label_dict[ntype] for ntype in self._label_nodes], dim=0).type(torch.float32)[mask]
+            labels = torch.cat([label_dict[ntype][mask[ntype]]for ntype in self._label_nodes], dim=0).type(torch.float32)
             loss = self._criterion(logits, labels)
 
             if compute_metrics:
@@ -100,13 +104,14 @@ class Evaluator:
 
         return {'loss': loss.item(), 'n_labelled_samples': incr_len} | metrics
 
-    def _get_incr_mask(self, incr_len: int) -> torch.Tensor:
+    def _get_incr_mask(self, incr: pl.DataFrame) -> dict[str, torch.Tensor]:
         assert self._dynamic_dataset.graph is not None, 'Graph should be initialized by this point!'
 
-        return torch.cat((
-            *(torch.zeros(self._dynamic_dataset.graph.num_nodes(label_node)) for label_node in self._label_nodes),
-            torch.ones(incr_len),
-        )).type(torch.bool)
+        mask = {}
+        for label_node in self._label_nodes:
+            ntype_num_nodes = self._dynamic_dataset.graph.number_of_nodes(label_node)
+            mask[label_node] = torch.cat((torch.zeros(ntype_num_nodes), torch.ones(len(incr)))).type(torch.bool)
+        return mask
 
     def stream_evaluate(self, mode: Literal['validation', 'testing']) -> EvaluationMetrics:
         assert self._dynamic_dataset.graph is not None, 'Graph should be initialized by this point!'
