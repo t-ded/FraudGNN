@@ -120,7 +120,11 @@ class GraphDataset:
                 for edge_description, edge_definition in self._edge_definitions.items()
             },
             num_nodes_dict={
-                node_type: source_tabular_data.select(pl.col(node_defining_col).n_unique()).collect().item()
+                node_type: (
+                    source_tabular_data.select(pl.col(node_defining_col).n_unique()).collect().item()
+                    if node_defining_col not in self._unique_cols
+                    else source_tabular_data.select(pl.len()).collect().item()
+                )
                 for node_type, node_defining_col in self._node_type_to_column_name_mapping.items()
             }
         )
