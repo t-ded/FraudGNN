@@ -78,9 +78,13 @@ class TestEvaluator:
 
     def test_validate(self) -> None:
         evaluation_results = self._evaluator.stream_evaluate('validation')
-        assert evaluation_results.total_loss >= 0
-        assert evaluation_results.number_of_samples == 1
+        assert evaluation_results.total_loss(nn.BCEWithLogitsLoss()) >= 0
+        assert evaluation_results.precision == 0.0
+        assert evaluation_results.recall == 0.0
+        assert evaluation_results.num_samples == 1
 
     def test_testing(self) -> None:
         evaluation_results = self._evaluator.stream_evaluate('testing')
-        assert evaluation_results.number_of_samples == 1
+        assert evaluation_results.num_samples == 1
+        assert evaluation_results.precision >= 0.0
+        assert evaluation_results.recall >= 0.0

@@ -1,9 +1,15 @@
+from __future__ import annotations
+
 import logging
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, Optional
 
+import numpy as np
 import polars as pl
 import torch
+from matplotlib import pyplot as plt
+from numpy.typing import NDArray
+from sklearn.metrics import precision_score, recall_score, precision_recall_curve
 from torch import nn, optim
 from tqdm import tqdm
 
@@ -20,10 +26,45 @@ class GNNHyperparameters:
     batch_size: int
 
 
-@dataclass
-class EvaluationMetrics:
-    number_of_samples: int
-    total_loss: float
+class EvaluationMetricsComputer:
+
+    def __init__(self, logits: torch.Tensor, labels: torch.Tensor) -> None:
+        self._logits = logits
+        self._labels = labels
+
+        self._probabilities: Optional[NDArray[np.float32]] = None
+        self._labels_np: Optional[NDArray[np.float32]] = None
+
+    @property
+    def num_samples(self) -> int:
+        return self._logits.shape[0]
+
+    @property
+    def labels_np(self) -> NDArray[np.float32]:
+        if self._labels_np is None:
+            self._labels_np = self._labels.cpu().numpy()
+        return self._labels_np
+
+    @property
+    def probabilities(self) -> NDArray[np.float32]:
+        if self._probabilities is None:
+            self._probabilities = self._logits.cpu().numpy()
+        return self._probabilities
+
+    def total_loss(self, loss_func: nn.Module) -> float:
+        return loss_func(self._logits, self._labels)
+
+    @property
+    def precision(self) -> float:
+        return precision_score(self.labels_np, (self.probabilities > 0.5).astype(np.int_))
+
+    @property
+    def recall(self) -> float:
+        return recall_score(self.labels_np, (self.probabilities > 0.5).astype(np.int_))
+
+    def update(self, other: EvaluationMetricsComputer) -> None:
+        self._logits = torch.cat((other._logits, self._logits), dim=0)
+        self._labels = torch.cat((other._labels, self._labels), dim=0)
 
 
 class Evaluator:
@@ -59,7 +100,7 @@ class Evaluator:
     def dynamic_dataset(self) -> DynamicDataset:
         return self._dynamic_dataset
 
-    def train(self, num_epochs: int) -> None:
+    def train(self, num_epochs: int, plot_loss: bool = False) -> None:
         assert self._dynamic_dataset.graph is not None, 'Graph should be initialized by this point!'
         logger.info('Starting the training process...')
 
@@ -81,12 +122,16 @@ class Evaluator:
             losses_per_epoch.append(loss.item())
             logger.info(f'Epoch {epoch + 1}/{num_epochs} - Loss: {loss.item()}')
 
-    def _validate_on_increment(self, incr: pl.DataFrame, compute_metrics: bool) -> dict[str, float]:
+        if plot_loss:
+            plt.plot(range(1, num_epochs + 1), losses_per_epoch, marker='o')
+            plt.xlabel('Epoch')
+            plt.ylabel('Loss')
+            plt.title('Training Loss Over Epochs')
+            plt.show()
+
+    def _validate_on_increment(self, incr: pl.DataFrame) -> EvaluationMetricsComputer:
         # TODO: For now, assume only transactions will be labelled -> unique node per row of incr, i.e., whole incr is validation set, number of samples is equal to incr length etc.
         assert self._dynamic_dataset.graph is not None, 'Graph should be initialized by this point!'
-
-        metrics: dict[str, float] = {}
-        incr_len = len(incr)
 
         mask: dict[str, torch.Tensor] = self._get_incr_mask(incr)
         self._dynamic_dataset.update_graph_with_increment(incr)
@@ -96,13 +141,8 @@ class Evaluator:
             logits = torch.cat([logit_dict[ntype][mask[ntype]] for ntype in self._label_nodes], dim=0)
             label_dict = self._dynamic_dataset.graph_dataset.labels
             labels = torch.cat([label_dict[ntype][mask[ntype]]for ntype in self._label_nodes], dim=0).type(torch.float32)
-            loss = self._criterion(logits, labels)
 
-            if compute_metrics:
-                # TODO: Compute evaluation metrics
-                pass
-
-        return {'loss': loss.item(), 'n_labelled_samples': incr_len} | metrics
+        return EvaluationMetricsComputer(logits=logits, labels=labels)
 
     def _get_incr_mask(self, incr: pl.DataFrame) -> dict[str, torch.Tensor]:
         assert self._dynamic_dataset.graph is not None, 'Graph should be initialized by this point!'
@@ -113,7 +153,7 @@ class Evaluator:
             mask[label_node] = torch.cat((torch.zeros(ntype_num_nodes), torch.ones(len(incr)))).type(torch.bool)
         return mask
 
-    def stream_evaluate(self, mode: Literal['validation', 'testing']) -> EvaluationMetrics:
+    def stream_evaluate(self, mode: Literal['validation', 'testing'], plot_pr_curve: bool = False) -> EvaluationMetricsComputer:
         assert self._dynamic_dataset.graph is not None, 'Graph should be initialized by this point!'
 
         if mode == 'validation':
@@ -129,18 +169,24 @@ class Evaluator:
 
         self._model.eval()
 
-        final_metrics = EvaluationMetrics(number_of_samples=0, total_loss=0.0)
+        final_metrics = EvaluationMetricsComputer(logits=torch.Tensor([]), labels=torch.Tensor([]))
         streaming_batches = self._dynamic_dataset.get_streaming_batches(ldf, self._hyperparameters.batch_size)
 
         for incr in tqdm(streaming_batches, desc='Evaluating...'):
-            metrics = self._validate_on_increment(incr.collect(), compute_metrics)
-            final_metrics.total_loss += metrics['loss']
-            final_metrics.number_of_samples += int(metrics['n_labelled_samples'])
+            final_metrics.update(self._validate_on_increment(incr.collect()))
 
-        if mode == 'validation':
-            logger.info(f'Validation process finished, final validation loss: {final_metrics.total_loss / final_metrics.number_of_samples:_.2f}.')
-        elif mode == 'testing':
-            logger.info(f'Testing process finished, final validation loss: {final_metrics.total_loss / final_metrics.number_of_samples:_.2f}.')
+        logger.info(f'{mode.capitalize()} process finished, final loss: {final_metrics.total_loss(self._criterion):.2f}.')
 
-        # TODO: More profound metric return
+        if compute_metrics:
+            logger.info(f'Final precision on 0.5 threshold: {final_metrics.precision:.2f}.')
+            logger.info(f'Final recall on 0.5 threshold: {final_metrics.recall:.2f}.')
+
+            if plot_pr_curve:
+                precision, recall, _ = precision_recall_curve(final_metrics.labels_np, final_metrics.probabilities)
+                plt.plot(recall, precision, marker='.')
+                plt.xlabel('Recall')
+                plt.ylabel('Precision')
+                plt.title('Precision-Recall Curve')
+                plt.show()
+
         return final_metrics
