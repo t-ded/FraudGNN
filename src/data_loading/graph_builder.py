@@ -1,6 +1,6 @@
 import logging
 from dataclasses import dataclass
-from typing import Optional, Any, cast, Iterator, Literal
+from typing import Optional, Any, cast, Iterator
 
 import dgl
 import polars as pl
@@ -145,17 +145,16 @@ class GraphDataset:
         assert isinstance(self._graph, dgl.DGLGraph), 'Can only enrich with features after graph has been initialized.'
         for node_col, node_feature_cols in self._node_feature_cols.items():
             node_type = self._column_name_to_node_type_mapping[node_col]
-            for feature_col in node_feature_cols:
-                if node_col not in self._unique_cols:
-                    source_tabular_data = source_tabular_data.unique(node_col, maintain_order=True)
-                self._update_ntype_with_features(node_type, source_tabular_data.select(feature_col).collect().to_torch().type(torch.float32), 'build')
 
-    def _update_ntype_with_features(self, ntype: str, feature_values: torch.Tensor, update_type: Literal['build', 'update']) -> None:
-        dim = 1 if update_type == 'build' else 0
-        if ntype not in self._features:
-            self._features[ntype] = feature_values
-        else:
-            self._features[ntype] = torch.cat((self._features[ntype], feature_values), dim=dim)
+            pre_selection = source_tabular_data
+            if node_col not in self._unique_cols:
+                pre_selection = pre_selection.unique(node_col, maintain_order=True)
+            node_feature_df = pre_selection.select(node_feature_cols).collect()
+            if node_feature_df.is_empty():
+                node_features = torch.empty(node_feature_df.shape, dtype=torch.float32)
+            else:
+                node_features = node_feature_df.to_torch().type(torch.float32)
+            self._features[node_type] = node_features
 
     def _enrich_with_labels(self, source_tabular_data: pl.LazyFrame) -> None:
         assert isinstance(self._graph, dgl.DGLGraph), 'Can only enrich with labels after graph has been initialized.'
@@ -241,8 +240,11 @@ class GraphDataset:
             if label_col is not None:
                 label_data[label_col] = incr_new.select(label_col).to_torch()
 
-        self._update_ntype_with_features(node_type, new_nodes_data, 'update')
+        self._update_ntype_with_features(node_type, new_nodes_data)
         return label_data
+
+    def _update_ntype_with_features(self, ntype: str, feature_values: torch.Tensor) -> None:
+        self._features[ntype] = torch.cat((self._features[ntype], feature_values), dim=0)
 
     def _update_edges_from_incr(self, incr: pl.DataFrame) -> None:
         assert isinstance(self._graph, dgl.DGLGraph), 'Can only update graph after graph has been initialized.'
