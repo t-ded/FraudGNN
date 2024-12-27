@@ -141,7 +141,7 @@ class Evaluator:
             self._optimizer.step()
 
             losses_per_epoch.append(loss.item())
-            logger.info(f'\nEpoch {epoch + 1}/{num_epochs} - Loss: {loss.item()}')
+            logger.info(f'Epoch {epoch + 1}/{num_epochs} - Loss: {loss.item()}')
 
         if plot_loss:
             plt.plot(range(1, num_epochs + 1), losses_per_epoch, marker='o')

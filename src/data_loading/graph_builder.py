@@ -183,11 +183,12 @@ class GraphDataset:
                     data=new_nodes_data if new_nodes_data else None,
                     ntype=node_type,
                 )
+            incr = incr.drop('cached_col', 'is_new_node_mask')
 
         self._update_edges_from_incr(incr)
 
     def _assign_node_ids_incr(self, incr_lazy: pl.LazyFrame, node_type: str, node_defining_col: str) -> pl.LazyFrame:
-        max_id = max(self._value_node_id_mapping[node_type].values(), default=-1) + 1
+        max_id = max(self._value_node_id_mapping[node_type].values(), default=-1)
         return (
             incr_lazy
             .with_columns(
@@ -198,10 +199,7 @@ class GraphDataset:
                 pl.col(node_defining_col).is_null().alias('is_new_node_mask'),
             )
             .with_columns(
-                pl.int_range(max_id, pl.len() + max_id).over('is_new_node_mask').alias('new_idx')
-            )
-            .with_columns(
-                pl.col(node_defining_col).fill_null(pl.col('new_idx').first().over('cached_col'))
+                pl.col(node_defining_col).fill_null(pl.col('cached_col').rank('dense').over('is_new_node_mask').add(max_id))
             )
         )
 

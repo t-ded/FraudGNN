@@ -15,12 +15,12 @@ with open(CONFIG_PATH) as f:
 
 if __name__ == '__main__':
     tabular_definition = TabularDatasetDefinition(
-        data_path=ROOT_DIR / config['processed_data_path'] / 'fraud.csv',
+        data_path=ROOT_DIR / config['processed_data_path'] / 'full_fraud.csv',
         numeric_columns=['city_pop', 'amt'],
         categorical_columns=['gender', 'job', 'category'],
         text_columns=[],
         required_columns=['is_fraud'] + ['tx_id', 'acct_num', 'merchant'] + ['city_pop', 'amt'] + ['gender', 'job', 'category'] + [],
-        train_val_test_ratios=TrainValTestRatios(0.6, 0.2, 0.2),
+        train_val_test_ratios=TrainValTestRatios(0.8, 0.1, 0.1),
     )
 
     graph_definition = GraphDatasetDefinition(
@@ -53,8 +53,8 @@ if __name__ == '__main__':
         identifier='HeterogeneousGraphSAGE',
     )
 
-    evaluator.train(10, plot_loss=True)
-    validation_results = evaluator.stream_evaluate('validation')
+    evaluator.train(20, plot_loss=True)
+    validation_results = evaluator.stream_evaluate('validation', compute_metrics=True, plot_pr_curve=True)
     validation_results.print_summary(loss_func=evaluator.criterion)
-    test_results = evaluator.stream_evaluate('testing', plot_pr_curve=True)
+    test_results = evaluator.stream_evaluate('testing', compute_metrics=True, plot_pr_curve=True)
     test_results.print_summary(loss_func=evaluator.criterion)
