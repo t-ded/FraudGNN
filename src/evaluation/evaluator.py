@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
 from typing import Literal, Optional
 
 import numpy as np
@@ -16,6 +19,14 @@ from tqdm import tqdm
 from src.data_loading.dynamic_dataset import DynamicDataset
 from src.data_loading.graph_builder import GraphDatasetDefinition
 from src.data_loading.tabular_dataset import TabularDatasetDefinition
+
+ROOT_DIR = Path(__file__).resolve().parent.parent.parent
+CONFIG_PATH = ROOT_DIR / 'config/general_config.json'
+
+with open(CONFIG_PATH) as f:
+    config = json.load(f)
+
+LOG_DIR = ROOT_DIR / config['logs']
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -70,7 +81,7 @@ class EvaluationMetricsComputer:
     def print_summary(self, loss_func: nn.Module = nn.BCEWithLogitsLoss()) -> None:
         print()
         print('-' * 25)
-        print(f'Evaluation Summary:')
+        print('Evaluation Summary:')
         print(f'- Number of samples: {self.num_samples}')
         print(f'- Precision: {self.precision:.4f}')
         print(f'- Recall: {self.recall:.4f}')
@@ -79,12 +90,13 @@ class EvaluationMetricsComputer:
         print()
 
 
+# TODO: Eventually, split Evaluator and Logger (and perhaps even Trainer) into separate classes from which we will compose something like FullPipeline object
 class Evaluator:
 
     def __init__(
             self, model: nn.Module, hyperparameters: GNNHyperparameters,
             tabular_dataset_definition: TabularDatasetDefinition, graph_dataset_definition: GraphDatasetDefinition,
-            preprocess_tabular: bool = True, identifier: str = 'GNNEvaluation',
+            preprocess_tabular: bool = True, identifier: str = 'GNNEvaluation', save_logs: bool = False,
     ) -> None:
         self._model = model
         self._hyperparameters = hyperparameters
@@ -108,6 +120,67 @@ class Evaluator:
         self._model.to(self._device)
         assert self._dynamic_dataset.graph is not None, 'Graph should be initialized by this point!'
         self._dynamic_dataset.graph.to(self._device)
+
+        self._save_logs = save_logs
+        self._log_dir = Path(LOG_DIR)
+        if self._save_logs:
+            self._setup_log_dir(hyperparameters, identifier, tabular_dataset_definition.data_path.name)
+            self._write_setup_summary(model, hyperparameters, identifier, tabular_dataset_definition, graph_dataset_definition)
+
+    def _setup_log_dir(self, hyperparameters: GNNHyperparameters, identifier: str, dataset_name: str) -> None:
+        datetime_part = f'_{datetime.today().strftime('%d_%m_%Y_%H_%M')}_'
+        hyperparam_part = '_'.join([f'lr{hyperparameters.learning_rate}', f'bs{hyperparameters.batch_size}'])
+        self._log_dir = LOG_DIR / (identifier + '_' + dataset_name + datetime_part + hyperparam_part)
+        self._log_dir.mkdir(parents=True, exist_ok=True)
+
+    def _write_setup_summary(
+            self, model: nn.Module, hyperparameters: GNNHyperparameters, identifier: str,
+            tabular_dataset_definition: TabularDatasetDefinition, graph_dataset_definition: GraphDatasetDefinition
+    ) -> None:
+
+        summary_file = self._log_dir / 'setup_summary.txt'
+
+        train_ratio = tabular_dataset_definition.train_val_test_ratios.train_ratio
+        val_ratio = tabular_dataset_definition.train_val_test_ratios.val_ratio
+        test_ratio = tabular_dataset_definition.train_val_test_ratios.test_ratio
+
+        node_feature_cols = '\n'.join([f"{node_col}: {feature_cols}" for node_col, feature_cols in graph_dataset_definition.node_feature_cols.items()])
+        node_label_cols = '\n'.join([f"{node_col}: {label_col}" for node_col, label_col in graph_dataset_definition.node_label_cols.items()])
+        edge_definitions = '\n'.join([f"{edge_description}: {edge_cols}" for edge_description, edge_cols in graph_dataset_definition.edge_definitions.items()])
+
+        summary_content = f"""
+Setup Summary
+=============
+Identifier: {identifier}
+Dataset: {tabular_dataset_definition.data_path.name}
+Train/Validation/Test Ratio: {train_ratio}/{val_ratio}/{test_ratio}
+
+Hyperparameters
+---------------
+Learning Rate: {hyperparameters.learning_rate}
+Batch Size: {hyperparameters.batch_size}
+
+Node Feature Columns
+----------------
+{node_feature_cols}
+
+Node Label Columns
+----------------
+{node_label_cols}
+
+Edge Definitions
+----------------
+{edge_definitions}
+
+Model Structure
+---------------
+{model}
+"""
+
+        with summary_file.open('w') as sum_file:
+            sum_file.write(summary_content.strip())
+
+        logger.info(f'Setup summary written to {summary_file}')
 
     @property
     def hyperparameters(self) -> GNNHyperparameters:
@@ -144,11 +217,22 @@ class Evaluator:
             logger.info(f'Epoch {epoch + 1}/{num_epochs} - Loss: {loss.item()}')
 
         if plot_loss:
-            plt.plot(range(1, num_epochs + 1), losses_per_epoch, marker='o')
-            plt.xlabel('Epoch')
-            plt.ylabel('Loss')
-            plt.title('Training Loss Over Epochs')
-            plt.show()
+            self._plot_loss(losses_per_epoch)
+
+    def _save_plot(self, figure: plt.Figure, name: str) -> None:
+        save_path = self._log_dir / f'{name}.png'
+        figure.savefig(save_path)
+        logger.info(f'Plot saved at {save_path}')
+
+    def _plot_loss(self, losses_per_epoch: list[float]) -> None:
+        fig, ax = plt.subplots()
+        ax.plot(range(1, len(losses_per_epoch) + 1), losses_per_epoch, marker='o')
+        ax.set_xlabel('Epoch')
+        ax.set_ylabel('Loss')
+        ax.set_title('Training Loss Over Epochs')
+
+        if self._save_logs:
+            self._save_plot(fig, 'training_loss')
 
     def _validate_on_increment(self, incr: pl.DataFrame) -> EvaluationMetricsComputer:
         # TODO: For now, assume only transactions will be labelled -> unique node per row of incr, i.e., whole incr is validation set, number of samples is equal to incr length etc.
@@ -198,13 +282,29 @@ class Evaluator:
         for incr in tqdm(streaming_batches, desc='Evaluating...'):
             final_metrics.update(self._validate_on_increment(incr.collect()))
 
+        self._evaluation_logging(final_metrics, mode, compute_metrics, plot_pr_curve)
+        return final_metrics
+
+    def _evaluation_logging(self, final_metrics: EvaluationMetricsComputer, mode: Literal['validation', 'testing'], compute_metrics: bool, plot_pr_curve: bool) -> None:
+
         logger.info(f'{mode.capitalize()} process finished, final loss: {final_metrics.total_loss(self._criterion):.2f}.')
 
+        results_summary_content = []
+
         if compute_metrics:
-            logger.info(f'Final precision on 0.5 threshold: {final_metrics.precision:.2f}.')
-            logger.info(f'Final recall on 0.5 threshold: {final_metrics.recall:.2f}.')
+            precision = final_metrics.precision
+            recall = final_metrics.recall
+
+            logger.info(f'Final precision on 0.5 threshold: {precision:.2f}.')
+            logger.info(f'Final recall on 0.5 threshold: {recall:.2f}.')
+
+            results_summary_content.append(f'{mode.capitalize()} Evaluation Summary\n')
+            results_summary_content.append(f'Final Loss: {final_metrics.total_loss(self._criterion):.4f}')
+            results_summary_content.append(f'Final Precision (Threshold 0.5): {precision:.4f}')
+            results_summary_content.append(f'Final Recall (Threshold 0.5): {recall:.4f}\n')
 
             if plot_pr_curve:
+                self._plot_and_save_pr_curve(final_metrics, mode)
                 precision, recall, _ = precision_recall_curve(final_metrics.labels_np, final_metrics.probabilities)
                 plt.plot(recall, precision, color='red' if mode == 'testing' else 'orange')
                 plt.xlabel('Recall')
@@ -212,4 +312,20 @@ class Evaluator:
                 plt.title('Precision-Recall Curve')
                 plt.show()
 
-        return final_metrics
+        if compute_metrics and self._save_logs:
+            summary_file = self._log_dir / f'results_summary_{mode}.txt'
+            with summary_file.open('w') as results_file:
+                results_file.write('\n'.join(results_summary_content).strip())
+
+            logger.info(f'{mode.capitalize()} results summary written to {summary_file}')
+
+    def _plot_and_save_pr_curve(self, final_metrics: EvaluationMetricsComputer, mode: Literal['validation', 'testing']) -> None:
+        fig, ax = plt.subplots()
+        color = 'red' if mode == 'testing' else 'orange'
+        precision, recall, _ = precision_recall_curve(final_metrics.labels_np, final_metrics.probabilities)
+        ax.plot(recall, precision, color=color)
+        ax.set_xlabel('Recall')
+        ax.set_ylabel('Precision')
+        ax.set_title('Precision-Recall Curve')
+        if self._save_logs:
+            self._save_plot(fig, f'pr_curve_{mode}')

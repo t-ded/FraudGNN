@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Iterable, NamedTuple
 
 import polars as pl
@@ -13,7 +14,7 @@ class TrainValTestRatios(NamedTuple):
 
 @dataclass
 class TabularDatasetDefinition:
-    data_path: str
+    data_path: Path
     numeric_columns: list[str]
     categorical_columns: list[str]
     text_columns: list[str]
@@ -97,7 +98,7 @@ class TabularDataset:
 
     def imbalance_ratio(self, col: str) -> float:
         grouping = self.train_ldf.group_by(col).agg(pl.len()).collect()
-        return grouping.filter((pl.col(col) == False)).select(pl.col('len')).item() / grouping.filter((pl.col(col) == True)).select(pl.col('len')).item()
+        return grouping.filter((pl.col(col).cast(pl.Boolean).not_())).select(pl.col('len')).item() / grouping.filter((pl.col(col).cast(pl.Boolean))).select(pl.col('len')).item()
 
     def with_columns(self, *exprs: IntoExpr | Iterable[IntoExpr]) -> None:
         self._ldf = self._ldf.with_columns(*exprs)

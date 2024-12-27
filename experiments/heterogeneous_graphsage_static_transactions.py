@@ -51,6 +51,7 @@ if __name__ == '__main__':
         graph_dataset_definition=graph_definition,
         preprocess_tabular=True,
         identifier='HeterogeneousGraphSAGE',
+        save_logs=True,
     )
 
     evaluator.train(20, plot_loss=True)
