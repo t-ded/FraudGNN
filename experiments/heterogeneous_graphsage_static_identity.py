@@ -17,26 +17,26 @@ if __name__ == '__main__':
     tabular_definition = TabularDatasetDefinition(
         data_path=ROOT_DIR / config['processed_data_path'] / 'full_fraud.csv',
         numeric_columns=['city_pop', 'amt'],
-        categorical_columns=['gender', 'job', 'category'],
+        categorical_columns=['job', 'category', 'dob', 'zip'],
         text_columns=[],
-        required_columns=['is_fraud'] + ['tx_id', 'acct_num', 'merchant'] + ['city_pop', 'amt'] + ['gender', 'job', 'category'] + [],
+        required_columns=['is_fraud'] + ['tx_id', 'dob', 'zip'] + ['city_pop', 'amt'] + ['job', 'category'] + [],
         train_val_test_ratios=TrainValTestRatios(0.8, 0.1, 0.1),
     )
 
     graph_definition = GraphDatasetDefinition(
-        node_feature_cols={'tx_id': ['amt'], 'acct_num': ['city_pop', 'gender', 'job'], 'merchant': ['category']},
+        node_feature_cols={'tx_id': ['amt', 'city_pop', 'category'], 'dob': ['dob'], 'zip': ['zip']},
         node_label_cols={'tx_id': 'is_fraud'},
         edge_definitions={
-            ('customer', 'sends', 'transaction'): ('acct_num', 'tx_id'),
-            ('transaction', 'sent_by', 'customer'): ('tx_id', 'acct_num'),
-            ('transaction', 'sent_to', 'merchant'): ('tx_id', 'merchant'),
-            ('merchant', 'received', 'transaction'): ('merchant', 'tx_id'),
+            ('transaction', 'tx_has_dob', 'dob'): ('tx_id', 'dob'),
+            ('dob', 'tx_has_dob_reverse', 'transaction'): ('dob', 'tx_id'),
+            ('transaction', 'tx_has_zip', 'zip'): ('tx_id', 'zip'),
+            ('zip', 'tx_has_zip_reverse', 'transaction'): ('zip', 'tx_id'),
         },
         unique_cols={'tx_id'},
     )
 
     model = HeteroGraphSAGE(
-        in_feats={'transaction': 1, 'customer': 3, 'merchant': 1},
+        in_feats={'transaction': 3, 'dob': 1, 'zip': 1},
         hidden_feats=16,
         n_layers=2,
         out_feats=1,
@@ -50,7 +50,7 @@ if __name__ == '__main__':
         tabular_dataset_definition=tabular_definition,
         graph_dataset_definition=graph_definition,
         preprocess_tabular=True,
-        identifier='HeterogeneousGraphSAGE_static_transactions_only',
+        identifier='HeterogeneousGraphSAGE_static_identity_only',
         save_logs=True,
     )
 
