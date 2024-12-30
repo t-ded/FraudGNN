@@ -230,6 +230,7 @@ Model Structure
         ax.set_xlabel('Epoch')
         ax.set_ylabel('Loss')
         ax.set_title('Training Loss Over Epochs')
+        ax.set_ylim(bottom=0)
 
         if self._save_logs:
             self._save_plot(fig, 'training_loss')
