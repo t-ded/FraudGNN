@@ -34,24 +34,24 @@ class DynamicDataset(DGLDataset):
     def _fit_transformer(self) -> None:
         assert self._data_transformer is not None, 'Data Transformer must be initialized prior to transforming data.'
         self._data_transformer.fit_numeric_scaler(
-            self.tabular_dataset.train_ldf.collect(),
-            self.tabular_dataset.numeric_columns,
+            self._tabular_dataset.train_ldf.collect(),
+            self._tabular_dataset.numeric_columns,
         )
         self._data_transformer.fit_encoder(
-            self.tabular_dataset.df,  # TODO: Assuming knowledge of the whole dataset in advance for simplicity
-            self.tabular_dataset.categorical_columns,
+            self._tabular_dataset.df,  # TODO: Assuming knowledge of the whole dataset in advance for simplicity
+            self._tabular_dataset.categorical_columns,
         )
 
     def _preprocess_tabular_dataset(self) -> None:
         assert self._data_transformer is not None, 'Data Transformer must be initialized prior to transforming data.'
-        self.tabular_dataset.with_columns(
+        self._tabular_dataset.with_columns(
             *self._data_transformer.get_normalized_numeric_columns(
-                self.tabular_dataset.df,
-                self.tabular_dataset.numeric_columns,
+                self._tabular_dataset.df,
+                self._tabular_dataset.numeric_columns,
             ),
             *self._data_transformer.get_encoded_categorical_columns(
-                self.tabular_dataset.df,
-                self.tabular_dataset.categorical_columns,
+                self._tabular_dataset.df,
+                self._tabular_dataset.categorical_columns,
             ),
         )
 
