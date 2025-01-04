@@ -47,12 +47,15 @@ class EvaluationMetricsComputer:
         self._logits: torch.Tensor = torch.Tensor([])
         self._labels: torch.Tensor = torch.Tensor([])
 
-        self._probabilities: Optional[NDArray[np.float32]] = None
-        self._labels_np: Optional[NDArray[np.float32]] = None
+        self._probabilities: NDArray[np.float32] = np.empty(0, dtype=np.float32)
+        self._labels_np: NDArray[np.float32] = np.empty(0, dtype=np.float32)
 
-    def build_logits_labels_tensors(self) -> None:
+    def build_logits_labels_tensors_and_numpy_representations(self) -> None:
         self._logits = torch.tensor(self._logits_list)
         self._labels = torch.tensor(self._labels_list)
+
+        self._probabilities = self._logits.cpu().numpy()
+        self._labels_np = self._labels.cpu().numpy()
 
     @property
     def num_samples(self) -> int:
@@ -60,14 +63,10 @@ class EvaluationMetricsComputer:
 
     @property
     def labels_np(self) -> NDArray[np.float32]:
-        if self._labels_np is None:
-            self._labels_np = self._labels.cpu().numpy()
         return self._labels_np
 
     @property
     def probabilities(self) -> NDArray[np.float32]:
-        if self._probabilities is None:
-            self._probabilities = self._logits.cpu().numpy()
         return self._probabilities
 
     def total_loss(self, loss_func: nn.Module) -> float:
@@ -292,7 +291,7 @@ Model Structure
 
         for incr in tqdm(streaming_batches, desc='Evaluating...'):
             final_metrics.update(*self._validate_on_increment(incr.collect()))
-        final_metrics.build_logits_labels_tensors()
+        final_metrics.build_logits_labels_tensors_and_numpy_representations()
 
         self._evaluation_logging(final_metrics, mode, compute_metrics, plot_pr_curve)
         return final_metrics
