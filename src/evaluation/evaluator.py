@@ -40,12 +40,19 @@ class GNNHyperparameters:
 
 class EvaluationMetricsComputer:
 
-    def __init__(self, logits: torch.Tensor, labels: torch.Tensor) -> None:
-        self._logits = logits
-        self._labels = labels
+    def __init__(self) -> None:
+        self._logits_list: list[torch.Tensor] = []
+        self._labels_list: list[torch.Tensor] = []
+
+        self._logits: torch.Tensor = torch.Tensor([])
+        self._labels: torch.Tensor = torch.Tensor([])
 
         self._probabilities: Optional[NDArray[np.float32]] = None
         self._labels_np: Optional[NDArray[np.float32]] = None
+
+    def build_logits_labels_tensors(self) -> None:
+        self._logits = torch.tensor(self._logits_list)
+        self._labels = torch.tensor(self._labels_list)
 
     @property
     def num_samples(self) -> int:
@@ -74,9 +81,9 @@ class EvaluationMetricsComputer:
     def recall(self) -> float:
         return recall_score(self.labels_np, (self.probabilities > 0.5).astype(np.int_))
 
-    def update(self, other: EvaluationMetricsComputer) -> None:
-        self._logits = torch.cat((other._logits, self._logits), dim=0)
-        self._labels = torch.cat((other._labels, self._labels), dim=0)
+    def update(self, logits: torch.Tensor, labels: torch.Tensor) -> None:
+        self._logits_list.append(logits)
+        self._labels_list.append(labels)
 
     def print_summary(self, loss_func: nn.Module = nn.BCEWithLogitsLoss()) -> None:
         print()
@@ -126,6 +133,9 @@ class Evaluator:
         if self._save_logs:
             self._setup_log_dir(hyperparameters, identifier, tabular_dataset_definition.data_path.name)
             self._write_setup_summary(model, hyperparameters, identifier, tabular_dataset_definition, graph_dataset_definition)
+
+        # sampler = dgl.dataloading.MultiLayerNeighborSampler([10, 10, 10])
+        # train_dataloader = dgl.dataloading.DataLoader(self._dynamic_dataset.graph, [0, 1], sampler, batch_size=self._hyperparameters.batch_size, shuffle=True, drop_last=False)
 
     def _setup_log_dir(self, hyperparameters: GNNHyperparameters, identifier: str, dataset_name: str) -> None:
         datetime_part = f'_{datetime.today().strftime('%d_%m_%Y_%H_%M')}_'
@@ -235,7 +245,7 @@ Model Structure
         if self._save_logs:
             self._save_plot(fig, 'training_loss')
 
-    def _validate_on_increment(self, incr: pl.DataFrame) -> EvaluationMetricsComputer:
+    def _validate_on_increment(self, incr: pl.DataFrame) -> tuple[torch.Tensor, torch.Tensor]:
         # TODO: For now, assume only transactions will be labelled -> unique node per row of incr, i.e., whole incr is validation set, number of samples is equal to incr length etc.
         assert self._dynamic_dataset.graph is not None, 'Graph should be initialized by this point!'
 
@@ -246,9 +256,9 @@ Model Structure
             logit_dict = self._model(self._dynamic_dataset.graph, self._dynamic_dataset.graph_features)
             logits = torch.cat([logit_dict[ntype][mask[ntype]] for ntype in self._label_nodes], dim=0)
             label_dict = self._dynamic_dataset.graph_dataset.labels
-            labels = torch.cat([label_dict[ntype][mask[ntype]]for ntype in self._label_nodes], dim=0).type(torch.float32)
+            labels = torch.cat([label_dict[ntype][mask[ntype]] for ntype in self._label_nodes], dim=0).type(torch.float32)
 
-        return EvaluationMetricsComputer(logits=logits, labels=labels)
+        return logits, labels
 
     def _get_incr_mask(self, incr: pl.DataFrame) -> dict[str, torch.Tensor]:
         assert self._dynamic_dataset.graph is not None, 'Graph should be initialized by this point!'
@@ -277,11 +287,12 @@ Model Structure
 
         self._model.eval()
 
-        final_metrics = EvaluationMetricsComputer(logits=torch.Tensor([]), labels=torch.Tensor([]))
+        final_metrics = EvaluationMetricsComputer()
         streaming_batches = self._dynamic_dataset.get_streaming_batches(ldf, self._hyperparameters.batch_size)
 
         for incr in tqdm(streaming_batches, desc='Evaluating...'):
-            final_metrics.update(self._validate_on_increment(incr.collect()))
+            final_metrics.update(*self._validate_on_increment(incr.collect()))
+        final_metrics.build_logits_labels_tensors()
 
         self._evaluation_logging(final_metrics, mode, compute_metrics, plot_pr_curve)
         return final_metrics
