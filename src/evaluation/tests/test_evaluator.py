@@ -29,6 +29,7 @@ class NaiveRGCN(nn.Module):
         self.conv2 = dglnn.HeteroGraphConv({
             rel: dglnn.GraphConv(hid_feats, out_feats)
             for rel in rel_names}, aggregate='sum')
+        self.n_layers = 2
 
     def forward(self, mfgs: list[DGLHeteroGraph], inputs: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         h = self.conv1(mfgs[0], inputs)
@@ -73,6 +74,7 @@ class TestEvaluator:
                 learning_rate=0.01,
                 train_batch_size=1,
                 validation_batch_size=1,
+                sampler_fanouts=[10, 15],
             ),
             tabular_dataset_definition=tabular_definition,
             graph_dataset_definition=graph_definition,

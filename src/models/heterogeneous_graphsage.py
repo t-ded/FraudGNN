@@ -59,6 +59,7 @@ class HeteroGraphSAGE(nn.Module):
         self.set_layer_dtype(torch.float32)
 
         self._activation = activation
+        self.n_layers = len(self._layers)
 
     @staticmethod
     def _validate_dimensionalities(hidden_feats: list[int], n_layers: Optional[int]) -> None:

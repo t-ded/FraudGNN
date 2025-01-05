@@ -39,6 +39,7 @@ class GNNHyperparameters:
     learning_rate: float
     train_batch_size: int
     validation_batch_size: int
+    sampler_fanouts: list[int]
 
 
 class EvaluationMetricsComputer:
@@ -133,7 +134,8 @@ class Evaluator:
             self._setup_log_dir(hyperparameters, identifier, tabular_dataset_definition.data_path.name)
             self._write_setup_summary(model, hyperparameters, identifier, tabular_dataset_definition, graph_dataset_definition)
 
-        self._sampler = dgl.dataloading.MultiLayerNeighborSampler([10, 15, 20]) # TODO: Generalize this into hyperparam
+        self._validate_sampler_dimensionalities()
+        self._sampler = dgl.dataloading.MultiLayerNeighborSampler(self._hyperparameters.sampler_fanouts) # TODO: Generalize this into hyperparam
 
     def _setup_log_dir(self, hyperparameters: GNNHyperparameters, identifier: str, dataset_name: str) -> None:
         datetime_part = f'_{datetime.today().strftime('%d_%m_%Y_%H_%M')}_'
@@ -191,6 +193,9 @@ Model Structure
             sum_file.write(summary_content.strip())
 
         logger.info(f'Setup summary written to {summary_file}')
+
+    def _validate_sampler_dimensionalities(self) -> None:
+        assert len(self._hyperparameters.sampler_fanouts) == self._model.n_layers, 'There has to be one sampler neighbour count per layer (excluding the last layer)'
 
     @property
     def hyperparameters(self) -> GNNHyperparameters:

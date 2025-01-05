@@ -51,7 +51,7 @@ if __name__ == '__main__':
 
     evaluator = Evaluator(
         model=model,
-        hyperparameters=GNNHyperparameters(learning_rate=0.01, train_batch_size=2_048, validation_batch_size=64),
+        hyperparameters=GNNHyperparameters(learning_rate=0.01, train_batch_size=2_048, validation_batch_size=64, sampler_fanouts=[10, 15, 20]),
         tabular_dataset_definition=tabular_definition,
         graph_dataset_definition=graph_definition,
         preprocess_tabular=True,
