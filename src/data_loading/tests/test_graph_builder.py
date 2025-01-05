@@ -38,11 +38,11 @@ class TestGraphDataset:
             GraphDataset(
                 GraphDatasetDefinition(
                     node_feature_cols={'test_id': []},
-                    node_label_cols={},
+                    label_node_col=None,
+                    label_col=None,
                     edge_definitions={
                         ('customer', 'makes', 'transaction'): ('test_customer', 'test_id'),
                     },
-                    unique_cols={'test_id'},
                 ),
             )
 
@@ -51,12 +51,12 @@ class TestGraphDataset:
             GraphDataset(
                 GraphDatasetDefinition(
                     node_feature_cols={'test_id': [], 'test_customer': [], 'test_counterparty': []},
-                    node_label_cols={},
+                    label_node_col=None,
+                    label_col=None,
                     edge_definitions={
                         ('customer', 'makes', 'transaction'): ('test_customer', 'test_id'),
                         ('customer', 'does', 'transaction'): ('test_counterparty', 'test_id'),
                     },
-                    unique_cols={'test_id'},
                 ),
             )
 
@@ -65,12 +65,12 @@ class TestGraphDataset:
             GraphDataset(
                 GraphDatasetDefinition(
                     node_feature_cols={'test_id': [], 'test_customer': [], 'test_counterparty': []},
-                    node_label_cols={},
+                    label_node_col=None,
+                    label_col=None,
                     edge_definitions={
                         ('customer', 'makes', 'tx'): ('test_customer', 'test_id'),
                         ('customer', 'makes', 'transaction'): ('test_customer', 'test_id'),
                     },
-                    unique_cols={'test_id'},
                 ),
             )
 
@@ -79,26 +79,26 @@ class TestGraphDataset:
             GraphDataset(
                 GraphDatasetDefinition(
                     node_feature_cols={'test_id': [], 'test_customer': [], 'test_counterparty': []},
-                    node_label_cols={},
+                    label_node_col=None,
+                    label_col=None,
                     edge_definitions={
                         ('customer', 'makes', 'transaction'): ('test_customer', 'test_id'),
                     },
-                    unique_cols={'test_id'},
                 ),
             )
 
         assert 'Nodes defined by column test_counterparty do not have any edges defined for them, will ignore these.' in caplog.text
 
     def test_raises_on_label_col_without_node_definition(self) -> None:
-        with pytest.raises(AssertionError, match='Node column test_counterparty does not have a node type assigned to it via edgelist occurrence.'):
+        with pytest.raises(AssertionError, match='Node column test_id does not have a node type assigned to it via edgelist occurrence.'):
             GraphDataset(
                 GraphDatasetDefinition(
                     node_feature_cols={'test_id': [], 'test_customer': [], 'test_counterparty': []},
-                    node_label_cols={'test_counterparty': 'label'},
+                    label_node_col='test_id',
+                    label_col='label',
                     edge_definitions={
-                        ('customer', 'makes', 'tx'): ('test_customer', 'test_id'),
+                        ('customer', 'interacted_with', 'counterparty'): ('test_customer', 'test_counterparty'),
                     },
-                    unique_cols={'test_id'},
                 ),
             )
 
@@ -106,12 +106,12 @@ class TestGraphDataset:
         graph_dataset = GraphDataset(
             GraphDatasetDefinition(
                 node_feature_cols={'test_id': [], 'test_customer': [], 'test_counterparty': []},
-                node_label_cols={},
+                label_node_col=None,
+                label_col=None,
                 edge_definitions={
                     ('customer', 'sends', 'transaction'): ('test_customer', 'test_id'),
                     ('transaction', 'sent_to', 'counterparty'): ('test_id', 'test_counterparty'),
                 },
-                unique_cols={'test_id'},
             ),
         )
         graph_dataset.build_graph(source_tabular_data=self._dataset.ldf)
@@ -133,12 +133,12 @@ class TestGraphDataset:
         graph_dataset = GraphDataset(
             GraphDatasetDefinition(
                 node_feature_cols={'test_id': ['test_amount'], 'test_customer': ['category_len'], 'test_counterparty': ['random_feature']},
-                node_label_cols={},
+                label_node_col=None,
+                label_col=None,
                 edge_definitions={
                     ('customer', 'sends', 'transaction'): ('test_customer', 'test_id'),
                     ('transaction', 'sent_to', 'counterparty'): ('test_id', 'test_counterparty'),
                 },
-                unique_cols={'test_id'},
             ),
         )
         graph_dataset.build_graph(source_tabular_data=self._dataset.ldf)
@@ -154,28 +154,28 @@ class TestGraphDataset:
         graph_dataset = GraphDataset(
             GraphDatasetDefinition(
                 node_feature_cols={'test_id': [], 'test_customer': []},
-                node_label_cols={'test_id': 'label'},
+                label_node_col='test_id',
+                label_col='label',
                 edge_definitions={
                     ('customer', 'sends', 'transaction'): ('test_customer', 'test_id')
                 },
-                unique_cols={'test_id'},
             ),
         )
         graph_dataset.build_graph(source_tabular_data=self._dataset.ldf)
 
         assert graph_dataset.graph is not None
-        np.testing.assert_array_equal(graph_dataset.labels['transaction'].flatten(), labels)
+        np.testing.assert_array_equal(graph_dataset.labels.flatten(), labels)
 
     def test_graph_update_connections(self) -> None:
         graph_dataset = GraphDataset(
             GraphDatasetDefinition(
                 node_feature_cols={'test_id': [], 'test_customer': [], 'test_counterparty': []},
-                node_label_cols={},
+                label_node_col=None,
+                label_col=None,
                 edge_definitions={
                     ('customer', 'sends', 'transaction'): ('test_customer', 'test_id'),
                     ('transaction', 'sent_to', 'counterparty'): ('test_id', 'test_counterparty'),
                 },
-                unique_cols={'test_id'},
             ),
         )
         graph_dataset.build_graph(source_tabular_data=self._dataset.ldf)
@@ -200,12 +200,12 @@ class TestGraphDataset:
         graph_dataset = GraphDataset(
             GraphDatasetDefinition(
                 node_feature_cols={'test_id': ['test_amount'], 'test_customer': ['category_len'], 'test_counterparty': ['random_feature']},
-                node_label_cols={},
+                label_node_col=None,
+                label_col=None,
                 edge_definitions={
                     ('customer', 'sends', 'transaction'): ('test_customer', 'test_id'),
                     ('transaction', 'sent_to', 'counterparty'): ('test_id', 'test_counterparty'),
                 },
-                unique_cols={'test_id'},
             ),
         )
         graph_dataset.build_graph(source_tabular_data=self._dataset.ldf)
@@ -230,11 +230,11 @@ class TestGraphDataset:
         graph_dataset = GraphDataset(
             GraphDatasetDefinition(
                 node_feature_cols={'test_id': [], 'test_customer': []},
-                node_label_cols={'test_id': 'label'},
+                label_node_col='test_id',
+                label_col='label',
                 edge_definitions={
                     ('customer', 'sends', 'transaction'): ('test_customer', 'test_id'),
                 },
-                unique_cols={'test_id'},
             ),
         )
         graph_dataset.build_graph(source_tabular_data=self._dataset.ldf)
@@ -243,7 +243,7 @@ class TestGraphDataset:
         graph_dataset.update_graph(incr)
 
         assert graph_dataset.graph is not None
-        np.testing.assert_array_equal(graph_dataset.labels['transaction'].flatten(), [1, 1, 1, 1, 1, 0, 0, 0])
+        np.testing.assert_array_equal(graph_dataset.labels.flatten(), [1, 1, 1, 1, 1, 0, 0, 0])
 
     def test_graph_update_old_nodes_new_features(self) -> None:
         rnd_feature = np.random.rand(self._dataset.df.height)
@@ -255,12 +255,12 @@ class TestGraphDataset:
         graph_dataset = GraphDataset(
             GraphDatasetDefinition(
                 node_feature_cols={'test_id': ['test_amount'], 'test_customer': ['category_len'], 'test_counterparty': ['random_feature']},
-                node_label_cols={},
+                label_node_col=None,
+                label_col=None,
                 edge_definitions={
                     ('customer', 'sends', 'transaction'): ('test_customer', 'test_id'),
                     ('transaction', 'sent_to', 'counterparty'): ('test_id', 'test_counterparty'),
                 },
-                unique_cols={'test_id'},
             ),
         )
         graph_dataset.build_graph(source_tabular_data=self._dataset.ldf)
@@ -278,6 +278,7 @@ class TestGraphDataset:
         np.testing.assert_array_almost_equal(graph_dataset.node_features['customer'].flatten(), torch.tensor([5, 7, 5, 5, 5]), decimal=4)
         np.testing.assert_array_almost_equal(graph_dataset.node_features['transaction'].flatten(), torch.tensor([100, 200, 300, 400, 500, 600]), decimal=4)
 
+    @pytest.mark.skip('Drop support of label updates for now.')
     def test_graph_update_old_nodes_new_labels(self) -> None:
         labels = np.zeros(self._dataset.df.height)
         self._dataset.with_columns(pl.lit(labels).alias('label'))
@@ -285,11 +286,11 @@ class TestGraphDataset:
         graph_dataset = GraphDataset(
             GraphDatasetDefinition(
                 node_feature_cols={'test_id': [], 'test_customer': []},
-                node_label_cols={'test_id': 'label'},
+                label_node_col='test_id',
+                label_col='label',
                 edge_definitions={
                     ('customer', 'sends', 'transaction'): ('test_customer', 'test_id'),
                 },
-                unique_cols={'test_id'},
             ),
         )
         graph_dataset.build_graph(source_tabular_data=self._dataset.ldf)
@@ -298,7 +299,7 @@ class TestGraphDataset:
         graph_dataset.update_graph(incr)
 
         assert graph_dataset.graph is not None
-        np.testing.assert_array_equal(graph_dataset.labels['transaction'].flatten(), [1, 0, 0, 0, 0])
+        np.testing.assert_array_equal(graph_dataset.labels.flatten(), [1, 0, 0, 0, 0])
 
     def test_conversion_to_homogeneous(self) -> None:
         labels = np.ones(self._dataset.df.height)
@@ -312,12 +313,12 @@ class TestGraphDataset:
         graph_dataset = GraphDataset(
             GraphDatasetDefinition(
                 node_feature_cols={'test_id': ['test_amount'], 'test_customer': ['category_len'], 'test_counterparty': ['random_feature']},
-                node_label_cols={'test_id': 'label'},
+                label_node_col='test_id',
+                label_col='label',
                 edge_definitions={
                     ('customer', 'sends', 'transaction'): ('test_customer', 'test_id'),
                     ('transaction', 'sent_to', 'counterparty'): ('test_id', 'test_counterparty'),
                 },
-                unique_cols={'test_id'},
             ),
         )
         graph_dataset.build_graph(source_tabular_data=self._dataset.ldf)
@@ -341,12 +342,12 @@ class TestGraphDataset:
         graph_dataset = GraphDataset(
             GraphDatasetDefinition(
                 node_feature_cols={'test_id': [], 'test_customer': [], 'test_counterparty': []},
-                node_label_cols={},
+                label_node_col=None,
+                label_col=None,
                 edge_definitions={
                     ('customer', 'sends', 'transaction'): ('test_customer', 'test_id'),
                     ('transaction', 'sent_to', 'counterparty'): ('test_id', 'test_counterparty'),
                 },
-                unique_cols={'test_id'},
             ),
         )
         graph_dataset.build_graph(source_tabular_data=self._dataset.ldf)

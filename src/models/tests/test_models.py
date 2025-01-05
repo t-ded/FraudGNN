@@ -38,14 +38,14 @@ class TestModels:
         )
         graph_definition = GraphDatasetDefinition(
             node_feature_cols={'test_id': ['test_amount', 'category_len', 'random_feature'], 'test_customer': ['category_len'], 'test_counterparty': ['random_feature', 'category_len']},
-            node_label_cols={'test_id': 'label'},
+            label_node_col='test_id',
+            label_col='label',
             edge_definitions={
                 ('customer', 'sends', 'transaction'): ('test_customer', 'test_id'),
                 ('transaction', 'sent_to', 'counterparty'): ('test_id', 'test_counterparty'),
                 ('counterparty', 'same_id_as_1', 'customer'): ('test_counterparty', 'test_customer'),
                 ('customer', 'same_id_as_2', 'counterparty'): ('test_customer', 'test_counterparty'),
             },
-            unique_cols={'test_id'},
         )
         self._dynamic_dataset = DynamicDataset(name='TestDynamicDataset', tabular_dataset_definition=tabular_definition, graph_dataset_definition=graph_definition)
         self._in_feats = {ntype: features.shape[1] for ntype, features in self._dynamic_dataset.graph_features.items()}

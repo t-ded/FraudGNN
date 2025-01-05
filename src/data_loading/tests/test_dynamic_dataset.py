@@ -33,11 +33,11 @@ class TestDynamicDataset:
             ),
             graph_dataset_definition=GraphDatasetDefinition(
                 node_feature_cols={'test_id': ['test_amount'], 'test_customer': []},
-                node_label_cols={},
+                label_node_col=None,
+                label_col=None,
                 edge_definitions={
                     ('customer', 'makes', 'transaction'): ('test_customer', 'test_id'),
                 },
-                unique_cols={'test_id'},
             ),
             preprocess_tabular=False,
         )

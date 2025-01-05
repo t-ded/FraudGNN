@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Literal, Optional, cast, Sized
 
 import dgl
-import dgl.graphbolt as gb
 import numpy as np
 import polars as pl
 import torch
@@ -116,14 +115,11 @@ class Evaluator:
             graph_dataset_definition=graph_dataset_definition,
             preprocess_tabular=preprocess_tabular,
         )
-        self._label_nodes = [self._dynamic_dataset.graph_dataset.get_ntype_for_column_name(col) for col in self._dynamic_dataset.graph_dataset.node_label_cols.keys()]
+        assert graph_dataset_definition.label_col, 'Cannot perform training and evaluation without label column specified.'
+        assert self._dynamic_dataset.graph_dataset.label_node_col is not None, 'Cannot perform training and evaluation without labelled node specified.'
+        self._labelled_node_ntype = self._dynamic_dataset.graph_dataset.get_ntype_for_column_name(self._dynamic_dataset.graph_dataset.label_node_col)
 
-        self._criterion = nn.BCEWithLogitsLoss(
-            pos_weight=torch.tensor(
-                [self._dynamic_dataset.tabular_dataset.imbalance_ratio(col)
-                 for col in graph_dataset_definition.node_label_cols.values()]
-            ).mean()
-        )
+        self._criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(self._dynamic_dataset.tabular_dataset.imbalance_ratio(graph_dataset_definition.label_col)))
         self._optimizer = optim.Adam(self._model.parameters(), lr=self._hyperparameters.learning_rate)
 
         self._device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -157,7 +153,8 @@ class Evaluator:
         test_ratio = tabular_dataset_definition.train_val_test_ratios.test_ratio
 
         node_feature_cols = '\n'.join([f"{node_col}: {feature_cols}" for node_col, feature_cols in graph_dataset_definition.node_feature_cols.items()])
-        node_label_cols = '\n'.join([f"{node_col}: {label_col}" for node_col, label_col in graph_dataset_definition.node_label_cols.items()])
+        label_node_col = graph_dataset_definition.label_node_col
+        label_col = graph_dataset_definition.label_col
         edge_definitions = '\n'.join([f"{edge_description}: {edge_cols}" for edge_description, edge_cols in graph_dataset_definition.edge_definitions.items()])
 
         summary_content = f"""
@@ -179,7 +176,7 @@ Node Feature Columns
 
 Node Label Columns
 ----------------
-{node_label_cols}
+{label_node_col} - {label_col}
 
 Edge Definitions
 ----------------
@@ -228,14 +225,13 @@ Model Structure
             epoch_loss = 0
 
             for input_nodes, output_nodes, blocks in training_dataloader:
-                if 'transaction' not in output_nodes:  # TODO: Generalize (and also simplify the whole label thing to only account for one label node/col)
+                if self._labelled_node_ntype not in output_nodes:
                     continue
 
                 input_features = {ntype: self._dynamic_dataset.graph_features[ntype][indices] for ntype, indices in input_nodes.items()}
 
-                logit_dict = self._model(blocks, input_features)
-                logits = torch.cat([logit_dict[ntype] for ntype in self._label_nodes], dim=0)
-                labels = torch.cat([self._dynamic_dataset.graph_dataset.labels[ntype][output_nodes[ntype]] for ntype in self._label_nodes], dim=0).type(torch.float32)
+                logits = self._model(blocks, input_features)[self._labelled_node_ntype]
+                labels = self._dynamic_dataset.graph_dataset.labels[output_nodes[self._labelled_node_ntype]]
                 loss = self._criterion(logits, labels)
 
                 self._optimizer.zero_grad()
@@ -270,28 +266,16 @@ Model Structure
             self._save_plot(fig, 'training_loss')
 
     def _validate_on_increment(self, incr: pl.DataFrame) -> tuple[torch.Tensor, torch.Tensor]:
-        # TODO: For now, assume only transactions will be labelled -> unique node per row of incr, i.e., whole incr is validation set, number of samples is equal to incr length etc.
         assert self._dynamic_dataset.graph is not None, 'Graph should be initialized by this point!'
 
-        mask: dict[str, torch.Tensor] = self._get_incr_mask(incr)
+        mask = torch.cat((torch.zeros(self._dynamic_dataset.graph.number_of_nodes(self._labelled_node_ntype)), torch.ones(len(incr)))).type(torch.bool)
         self._dynamic_dataset.update_graph_with_increment(incr)
 
         with torch.no_grad():
-            logit_dict = self._model.graph_forward(self._dynamic_dataset.graph, self._dynamic_dataset.graph_features)
-            logits = torch.cat([logit_dict[ntype][mask[ntype]] for ntype in self._label_nodes], dim=0)
-            label_dict = self._dynamic_dataset.graph_dataset.labels
-            labels = torch.cat([label_dict[ntype][mask[ntype]] for ntype in self._label_nodes], dim=0).type(torch.float32)
+            logits = self._model.graph_forward(self._dynamic_dataset.graph, self._dynamic_dataset.graph_features)[self._labelled_node_ntype][mask]
+            labels = self._dynamic_dataset.graph_dataset.labels[mask]
 
         return logits, labels
-
-    def _get_incr_mask(self, incr: pl.DataFrame) -> dict[str, torch.Tensor]:
-        assert self._dynamic_dataset.graph is not None, 'Graph should be initialized by this point!'
-
-        mask = {}
-        for label_node in self._label_nodes:
-            ntype_num_nodes = self._dynamic_dataset.graph.number_of_nodes(label_node)
-            mask[label_node] = torch.cat((torch.zeros(ntype_num_nodes), torch.ones(len(incr)))).type(torch.bool)
-        return mask
 
     def stream_evaluate(self, mode: Literal['validation', 'testing'], compute_metrics: Optional[bool] = None, plot_pr_curve: bool = False) -> EvaluationMetricsComputer:
         assert self._dynamic_dataset.graph is not None, 'Graph should be initialized by this point!'

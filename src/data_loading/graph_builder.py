@@ -12,9 +12,9 @@ logger = logging.getLogger(__name__)
 @dataclass
 class GraphDatasetDefinition:
     node_feature_cols: dict[str, list[str]]
-    node_label_cols: dict[str, str]
+    label_node_col: Optional[str]
+    label_col: Optional[str]
     edge_definitions: dict[tuple[str, str, str], tuple[str, str]]
-    unique_cols: set[str]
 
 
 class GraphDataset:
@@ -22,9 +22,9 @@ class GraphDataset:
     def __init__(self, graph_dataset_definition: GraphDatasetDefinition) -> None:
         self._node_defining_cols = list(graph_dataset_definition.node_feature_cols.keys())
         self._node_feature_cols = graph_dataset_definition.node_feature_cols
-        self._node_label_cols = graph_dataset_definition.node_label_cols
+        self._label_node_col = graph_dataset_definition.label_node_col
+        self._label_col = graph_dataset_definition.label_col
         self._edge_definitions = graph_dataset_definition.edge_definitions
-        self._unique_cols = graph_dataset_definition.unique_cols
 
         self._node_type_to_column_name_mapping: dict[str, str] = {}
         self._column_name_to_node_type_mapping: dict[str, str] = {}
@@ -34,22 +34,23 @@ class GraphDataset:
         self._value_node_id_mapping: dict[str, dict[Any, int]] = {}
         self._graph: Optional[dgl.DGLGraph] = None
         self._features: dict[str, torch.Tensor] = {}
+        self._labels: torch.Tensor = torch.empty(0, dtype=torch.float32)
 
     @property
     def graph(self) -> Optional[dgl.DGLGraph]:
         return self._graph
 
     @property
-    def labels(self) -> dict[str, torch.Tensor]:
-        assert self._graph is not None, 'Cannot retrieve labels from graph prior to initialization.'
-        labels: dict[str, torch.Tensor] = {}
-        for label_col in self._node_label_cols.values():
-            labels |= self._graph.ndata[label_col]
-        return labels
+    def labels(self) -> torch.Tensor:
+        return self._labels
 
     @property
-    def node_label_cols(self) -> dict[str, str]:
-        return self._node_label_cols
+    def label_node_col(self) -> Optional[str]:
+        return self._label_node_col
+
+    @property
+    def label_col(self) -> Optional[str]:
+        return self._label_col
 
     @property
     def node_features(self) -> dict[str, torch.Tensor]:
@@ -59,7 +60,7 @@ class GraphDataset:
         self._check_matching_node_edge_definitions()
         self._check_consistent_node_type_column_pairing()
         self._check_all_node_types_used_in_edgelist()
-        self._check_label_cols()
+        self._check_label_col()
 
     def _check_matching_node_edge_definitions(self) -> None:
         for edge_description, edge_definition in self._edge_definitions.items():
@@ -104,9 +105,12 @@ class GraphDataset:
             logger.warning(f'Nodes defined by column {node_without_edges} do not have any edges defined for them, will ignore these.')
             self._node_defining_cols.remove(node_without_edges)
 
-    def _check_label_cols(self) -> None:
-        for node_col, label_col in self._node_label_cols.items():
-            assert node_col in self._column_name_to_node_type_mapping, f'Node column {node_col} does not have a node type assigned to it via edgelist occurrence.'
+    def _check_label_col(self) -> None:
+        if (self._label_col is None) != (self._label_node_col is None):
+            raise ValueError('Both label_col and label_node_col must be specified or neither should be.')
+
+        if self._label_col is not None and self._label_node_col is not None:
+            assert self._label_node_col in self._column_name_to_node_type_mapping, f'Node column {self._label_node_col} does not have a node type assigned to it via edgelist occurrence.'
 
     def get_ntype_for_column_name(self, column_name: str) -> str:
         return self._column_name_to_node_type_mapping[column_name]
@@ -122,7 +126,7 @@ class GraphDataset:
             num_nodes_dict={
                 node_type: (
                     source_tabular_data.select(pl.col(node_defining_col).n_unique()).collect().item()
-                    if node_defining_col not in self._unique_cols
+                    if node_defining_col != self._label_node_col
                     else source_tabular_data.select(pl.len()).collect().item()
                 )
                 for node_type, node_defining_col in self._node_type_to_column_name_mapping.items()
@@ -130,7 +134,8 @@ class GraphDataset:
         )
 
         self._enrich_with_features(source_tabular_data)
-        self._enrich_with_labels(source_tabular_data)
+        if self._label_col is not None and self._label_node_col is not None:
+            self._enrich_with_labels(source_tabular_data)
 
     def _assign_node_ids(self, source_tabular_data: pl.LazyFrame) -> pl.LazyFrame:
         for node_type, node_defining_col in self._node_type_to_column_name_mapping.items():
@@ -147,7 +152,7 @@ class GraphDataset:
             node_type = self._column_name_to_node_type_mapping[node_col]
 
             pre_selection = source_tabular_data
-            if node_col not in self._unique_cols:
+            if node_col != self._label_node_col:
                 pre_selection = pre_selection.unique(node_col, maintain_order=True)
             node_feature_df = pre_selection.select(node_feature_cols).collect()
             if node_feature_df.is_empty():
@@ -158,11 +163,7 @@ class GraphDataset:
 
     def _enrich_with_labels(self, source_tabular_data: pl.LazyFrame) -> None:
         assert isinstance(self._graph, dgl.DGLGraph), 'Can only enrich with labels after graph has been initialized.'
-        for node_col, label_col in self._node_label_cols.items():
-            node_type = self._column_name_to_node_type_mapping[node_col]
-            if node_col not in self._unique_cols:
-                source_tabular_data = source_tabular_data.unique(node_col, maintain_order=True)
-            self._graph.nodes[node_type].data[label_col] = source_tabular_data.select(label_col).collect().to_torch().long()
+        self._labels = source_tabular_data.select(self._label_col).collect().to_torch().type(torch.float32)
 
     def update_graph(self, incr: pl.DataFrame) -> None:
         assert isinstance(self._graph, dgl.DGLGraph), 'Can only update graph after graph has been initialized.'
@@ -176,16 +177,18 @@ class GraphDataset:
 
             self._value_node_id_mapping[node_type].update(new_id_mapping)
 
-            new_nodes_data = self._get_new_data_update_old_data(node_type, node_defining_col, incr)
+            self._update_ntype_features_from_incr(node_type, node_defining_col, incr)
             if new_id_mapping:
                 self._graph.add_nodes(
                     num=len(new_id_mapping),
-                    data=new_nodes_data if new_nodes_data else None,
+                    data=None,
                     ntype=node_type,
                 )
             incr = incr.drop('cached_col', 'is_new_node_mask')
 
         self._update_edges_from_incr(incr)
+        if self._label_col is not None and self._label_node_col is not None:
+            self._update_labels_from_incr(incr)
 
     def _assign_node_ids_incr(self, incr_lazy: pl.LazyFrame, node_type: str, node_defining_col: str) -> pl.LazyFrame:
         max_id = max(self._value_node_id_mapping[node_type].values(), default=-1)
@@ -203,10 +206,10 @@ class GraphDataset:
             )
         )
 
-    def _get_new_data_update_old_data(self, node_type: str, node_defining_col: str, incr: pl.DataFrame) -> dict[str, torch.Tensor]:
-        assert isinstance(self._graph, dgl.DGLGraph), 'Can only update graph after graph has been initialized.'
+    def _update_ntype_features_from_incr(self, node_type: str, node_defining_col: str, incr: pl.DataFrame) -> None:
+        assert isinstance(self._graph, dgl.DGLGraph), 'Can only update features after graph has been initialized.'
 
-        if node_defining_col not in self._unique_cols:
+        if node_defining_col != self._label_node_col:
             incr = incr.unique(node_defining_col, maintain_order=True)
 
         incr_new = incr.filter(pl.col('is_new_node_mask'))
@@ -217,29 +220,15 @@ class GraphDataset:
         num_features_for_this_node_type = len(self._node_feature_cols[node_defining_col])
         new_nodes_data: torch.Tensor = torch.empty((num_new, num_features_for_this_node_type), dtype=torch.float32)
 
-        label_data: dict[str, torch.Tensor] = {}
-        label_col = self._node_label_cols.get(node_defining_col)
-
         if len(old_nodes_ids) > 0:
-
             for nth_feature, feature_col in enumerate(self._node_feature_cols[node_defining_col]):
                 self._features[node_type][old_nodes_ids, nth_feature] = incr_old.select(feature_col).to_torch().type(torch.float32).flatten()
                 new_nodes_data[:, nth_feature] = incr_new.select(feature_col).to_torch().type(torch.float32).flatten()
-
-            if label_col is not None:
-                self._graph.nodes[node_type].data[label_col][old_nodes_ids] = incr_old.select(label_col).to_torch()
-                label_data[label_col] = incr_new.select(label_col).to_torch()
-
         else:
-
             for nth_feature, feature_col in enumerate(self._node_feature_cols[node_defining_col]):
                 new_nodes_data[:, nth_feature] = incr_new.select(feature_col).to_torch().type(torch.float32).flatten()
 
-            if label_col is not None:
-                label_data[label_col] = incr_new.select(label_col).to_torch()
-
         self._update_ntype_with_features(node_type, new_nodes_data)
-        return label_data
 
     def _update_ntype_with_features(self, ntype: str, feature_values: torch.Tensor) -> None:
         self._features[ntype] = torch.cat((self._features[ntype], feature_values), dim=0)
@@ -250,6 +239,9 @@ class GraphDataset:
         for edge_description, edge_definition in self._edge_definitions.items():
             edge_src_dst = incr.select(edge_definition).to_numpy(writable=True).T
             self._graph.add_edges(*edge_src_dst, etype=edge_description[1])
+
+    def _update_labels_from_incr(self, incr: pl.DataFrame) -> None:
+        self._labels = torch.cat([self._labels, incr.select(self._label_col).to_torch().type(torch.float32)], dim=0)
 
     def get_homogeneous(self, store_type: bool = True) -> dgl.DGLGraph:
         assert isinstance(self._graph, dgl.DGLGraph), 'Can only convert graph to homogeneous after graph has been initialized.'
@@ -272,9 +264,8 @@ class GraphDataset:
             homogeneous_features[node_idx : node_idx + ntype_num_nodes, feature_idx : feature_idx + ntype_features.shape[1]] = ntype_features
             feature_idx += ntype_features.shape[1]
 
-            label_col = self._node_label_cols.get(ntype_col)
-            if label_col is not None:
-                homogeneous_labels[label_node_idx : label_node_idx + ntype_num_nodes] = self._graph.nodes[ntype].data[label_col].squeeze(1)
+            if ntype_col == self._label_node_col:
+                homogeneous_labels[label_node_idx : label_node_idx + ntype_num_nodes] = self._labels.squeeze()
 
             node_idx += ntype_num_nodes
             label_node_idx += ntype_num_nodes

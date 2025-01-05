@@ -25,14 +25,14 @@ if __name__ == '__main__':
 
     graph_definition = GraphDatasetDefinition(
         node_feature_cols={'tx_id': ['amt'], 'acct_num': ['city_pop', 'gender', 'job'], 'merchant': ['category']},
-        node_label_cols={'tx_id': 'is_fraud'},
+        label_node_col='tx_id',
+        label_col='is_fraud',
         edge_definitions={
             ('customer', 'sends', 'transaction'): ('acct_num', 'tx_id'),
             ('transaction', 'sent_by', 'customer'): ('tx_id', 'acct_num'),
             ('transaction', 'sent_to', 'merchant'): ('tx_id', 'merchant'),
             ('merchant', 'received', 'transaction'): ('merchant', 'tx_id'),
         },
-        unique_cols={'tx_id'},
     )
 
     model = HeteroGraphSAGE(
