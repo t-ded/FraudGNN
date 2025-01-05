@@ -4,7 +4,7 @@ from pathlib import Path
 import dgl.nn as dglnn
 import torch
 import torch.nn.functional as F
-from dgl import DGLGraph
+from dgl import DGLGraph, DGLHeteroGraph
 from torch import nn
 
 from src.base.build_test_dataset import ENRICHED_TEST_DATASET_ALL_COLUMNS
@@ -30,7 +30,13 @@ class NaiveRGCN(nn.Module):
             rel: dglnn.GraphConv(hid_feats, out_feats)
             for rel in rel_names}, aggregate='sum')
 
-    def forward(self, graph: DGLGraph, inputs: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+    def forward(self, mfgs: list[DGLHeteroGraph], inputs: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+        h = self.conv1(mfgs[0], inputs)
+        h = {k: F.relu(v) for k, v in h.items()}
+        h = self.conv2(mfgs[1], h)
+        return h
+
+    def graph_forward(self, graph: DGLGraph, inputs: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         h = self.conv1(graph, inputs)
         h = {k: F.relu(v) for k, v in h.items()}
         h = self.conv2(graph, h)
@@ -65,7 +71,8 @@ class TestEvaluator:
             model=self._model,
             hyperparameters=GNNHyperparameters(
                 learning_rate=0.01,
-                batch_size=1,
+                train_batch_size=1,
+                validation_batch_size=1,
             ),
             tabular_dataset_definition=tabular_definition,
             graph_dataset_definition=graph_definition,

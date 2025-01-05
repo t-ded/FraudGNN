@@ -4,7 +4,7 @@ import dgl.nn as dglnn
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from dgl import DGLGraph
+from dgl import DGLGraph, DGLHeteroGraph
 from dgl.nn.pytorch import HeteroGraphConv
 
 
@@ -56,6 +56,8 @@ class HeteroGraphSAGE(nn.Module):
             }, aggregate=heterogeneous_aggregation)
         )
 
+        self.set_layer_dtype(torch.float32)
+
         self._activation = activation
 
     @staticmethod
@@ -73,7 +75,21 @@ class HeteroGraphSAGE(nn.Module):
             assert src_type in in_feats, f"Source node of type '{src_type}' of edge '{etype}' does not have known feature dimensionality."
             assert dst_type in in_feats, f"Destination node of type '{dst_type}' of edge '{etype}' does not have known feature dimensionality."
 
-    def forward(self, graph: DGLGraph, inputs: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+    def set_layer_dtype(self, _dtype: torch.dtype) -> None:
+        for layer in self._layers:
+            for param in layer.parameters():
+                param.data = param.data.to(_dtype)
+
+    def forward(self, mfgs: list[DGLHeteroGraph], inputs: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+        h = inputs
+        for mfg, layer in zip(mfgs, self._layers[:-1]):
+            h = layer(mfg, h)
+            if self._activation:
+                h = {k: self._activation(v) for k, v in h.items()}
+        h = self._layers[-1](mfgs[-1], h)
+        return h
+
+    def graph_forward(self, graph: DGLGraph, inputs: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         h = inputs
         for layer in self._layers[:-1]:
             h = layer(graph, h)

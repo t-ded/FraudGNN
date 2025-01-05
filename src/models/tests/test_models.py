@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+import dgl
 import pytest
 from torch import nn
 
@@ -67,11 +68,20 @@ class TestModels:
         with pytest.raises(AssertionError, match="Destination node of type 'content' of edge 'follows' does not have known feature dimensionality."):
             model(in_feats={'user': 4}, hidden_feats=5, n_layers=1, out_feats=1, edge_definitions={('user', 'follows', 'content')})
 
+    def test_graph_forward_pass(self, model: nn.Module) -> None:
+        assert self._dynamic_dataset.graph is not None
+
+        model_instance = model(in_feats=self._in_feats, hidden_feats=[16, 16], n_layers=3, out_feats=1, edge_definitions=set(self._dynamic_dataset.graph.canonical_etypes))
+        res = model_instance.graph_forward(self._dynamic_dataset.graph, self._dynamic_dataset.graph_features)
+        for ntype in self._dynamic_dataset.graph.ntypes:
+            assert ntype in res
+            assert list(res[ntype].shape) == [3, 1]
+
     def test_forward_pass(self, model: nn.Module) -> None:
         assert self._dynamic_dataset.graph is not None
 
         model_instance = model(in_feats=self._in_feats, hidden_feats=[16, 16], n_layers=3, out_feats=1, edge_definitions=set(self._dynamic_dataset.graph.canonical_etypes))
-        res = model_instance.forward(self._dynamic_dataset.graph, self._dynamic_dataset.graph_features)
+        res = model_instance.graph_forward(dgl.to_block(self._dynamic_dataset.graph), self._dynamic_dataset.graph_features)
         for ntype in self._dynamic_dataset.graph.ntypes:
             assert ntype in res
             assert list(res[ntype].shape) == [3, 1]

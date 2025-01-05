@@ -46,7 +46,7 @@ if __name__ == '__main__':
 
     evaluator = Evaluator(
         model=model,
-        hyperparameters=GNNHyperparameters(learning_rate=0.01, batch_size=64),
+        hyperparameters=GNNHyperparameters(learning_rate=0.01, train_batch_size=2_048, validation_batch_size=64),
         tabular_dataset_definition=tabular_definition,
         graph_dataset_definition=graph_definition,
         preprocess_tabular=True,
@@ -54,7 +54,7 @@ if __name__ == '__main__':
         save_logs=True,
     )
 
-    evaluator.train(20, plot_loss=True)
+    evaluator.train(10, plot_loss=True)
     validation_results = evaluator.stream_evaluate('validation', compute_metrics=True, plot_pr_curve=True)
     validation_results.print_summary(loss_func=evaluator.criterion)
     test_results = evaluator.stream_evaluate('testing', compute_metrics=True, plot_pr_curve=True)

@@ -5,8 +5,10 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Literal, Optional, cast, Sized
 
+import dgl
+import dgl.graphbolt as gb
 import numpy as np
 import polars as pl
 import torch
@@ -36,7 +38,8 @@ logger = logging.getLogger(__name__)
 @dataclass
 class GNNHyperparameters:
     learning_rate: float
-    batch_size: int
+    train_batch_size: int
+    validation_batch_size: int
 
 
 class EvaluationMetricsComputer:
@@ -134,12 +137,11 @@ class Evaluator:
             self._setup_log_dir(hyperparameters, identifier, tabular_dataset_definition.data_path.name)
             self._write_setup_summary(model, hyperparameters, identifier, tabular_dataset_definition, graph_dataset_definition)
 
-        # sampler = dgl.dataloading.MultiLayerNeighborSampler([10, 10, 10])
-        # train_dataloader = dgl.dataloading.DataLoader(self._dynamic_dataset.graph, [0, 1], sampler, batch_size=self._hyperparameters.batch_size, shuffle=True, drop_last=False)
+        self._sampler = dgl.dataloading.MultiLayerNeighborSampler([10, 15, 20]) # TODO: Generalize this into hyperparam
 
     def _setup_log_dir(self, hyperparameters: GNNHyperparameters, identifier: str, dataset_name: str) -> None:
         datetime_part = f'_{datetime.today().strftime('%d_%m_%Y_%H_%M')}_'
-        hyperparam_part = '_'.join([f'lr{hyperparameters.learning_rate}', f'bs{hyperparameters.batch_size}'])
+        hyperparam_part = '_'.join([f'lr{hyperparameters.learning_rate}', f'tbs{hyperparameters.train_batch_size}', f'vbs{hyperparameters.validation_batch_size}'])
         self._log_dir = LOG_DIR / (identifier + '_' + dataset_name + datetime_part + hyperparam_part)
         self._log_dir.mkdir(parents=True, exist_ok=True)
 
@@ -168,7 +170,8 @@ Train/Validation/Test Ratio: {train_ratio}/{val_ratio}/{test_ratio}
 Hyperparameters
 ---------------
 Learning Rate: {hyperparameters.learning_rate}
-Batch Size: {hyperparameters.batch_size}
+Training Batch Size: {hyperparameters.train_batch_size}
+Validation Batch Size: {hyperparameters.validation_batch_size}
 
 Node Feature Columns
 ----------------
@@ -208,23 +211,42 @@ Model Structure
         assert self._dynamic_dataset.graph is not None, 'Graph should be initialized by this point!'
         logger.info('Starting the training process...')
 
+        training_dataloader = dgl.dataloading.DataLoader(
+            self._dynamic_dataset.graph,
+            indices={ntype: torch.arange(self._dynamic_dataset.graph.number_of_nodes(ntype)).to(self._device) for ntype in self._dynamic_dataset.graph.ntypes},
+            graph_sampler=self._sampler,
+            batch_size=self._hyperparameters.train_batch_size,
+            shuffle=True,
+            drop_last=False,
+            device=self._device,
+        )
+
         losses_per_epoch = []
 
         for epoch in tqdm(range(num_epochs), desc='Training...'):
-            self._model.train()
 
-            logit_dict = self._model(self._dynamic_dataset.graph, self._dynamic_dataset.graph_features)
-            logits = torch.cat([logit_dict[ntype] for ntype in self._label_nodes], dim=0)
-            label_dict = self._dynamic_dataset.graph_dataset.labels
-            labels = torch.cat([label_dict[ntype] for ntype in self._label_nodes], dim=0).type(torch.float32)
-            loss = self._criterion(logits, labels)
+            epoch_loss = 0
 
-            self._optimizer.zero_grad()
-            loss.backward()
-            self._optimizer.step()
+            for input_nodes, output_nodes, blocks in training_dataloader:
+                if 'transaction' not in output_nodes:  # TODO: Generalize (and also simplify the whole label thing to only account for one label node/col)
+                    continue
 
-            losses_per_epoch.append(loss.item())
-            logger.info(f'Epoch {epoch + 1}/{num_epochs} - Loss: {loss.item()}')
+                input_features = {ntype: self._dynamic_dataset.graph_features[ntype][indices] for ntype, indices in input_nodes.items()}
+
+                logit_dict = self._model(blocks, input_features)
+                logits = torch.cat([logit_dict[ntype] for ntype in self._label_nodes], dim=0)
+                labels = torch.cat([self._dynamic_dataset.graph_dataset.labels[ntype][output_nodes[ntype]] for ntype in self._label_nodes], dim=0).type(torch.float32)
+                loss = self._criterion(logits, labels)
+
+                self._optimizer.zero_grad()
+                loss.backward()
+                self._optimizer.step()
+
+                epoch_loss += loss.item()
+
+            average_loss = epoch_loss / len(cast(Sized, training_dataloader))
+            losses_per_epoch.append(average_loss)
+            logger.info(f'Epoch {epoch + 1}/{num_epochs} - Loss: {average_loss}')
 
         if plot_loss:
             self._plot_loss(losses_per_epoch)
@@ -255,7 +277,7 @@ Model Structure
         self._dynamic_dataset.update_graph_with_increment(incr)
 
         with torch.no_grad():
-            logit_dict = self._model(self._dynamic_dataset.graph, self._dynamic_dataset.graph_features)
+            logit_dict = self._model.graph_forward(self._dynamic_dataset.graph, self._dynamic_dataset.graph_features)
             logits = torch.cat([logit_dict[ntype][mask[ntype]] for ntype in self._label_nodes], dim=0)
             label_dict = self._dynamic_dataset.graph_dataset.labels
             labels = torch.cat([label_dict[ntype][mask[ntype]] for ntype in self._label_nodes], dim=0).type(torch.float32)
@@ -290,7 +312,7 @@ Model Structure
         self._model.eval()
 
         final_metrics = EvaluationMetricsComputer()
-        streaming_batches = self._dynamic_dataset.get_streaming_batches(ldf, self._hyperparameters.batch_size)
+        streaming_batches = self._dynamic_dataset.get_streaming_batches(ldf, self._hyperparameters.validation_batch_size)
 
         for incr in tqdm(streaming_batches, desc='Evaluating...'):
             final_metrics.update(*self._validate_on_increment(incr.collect()))
