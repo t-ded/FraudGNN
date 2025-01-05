@@ -11,6 +11,7 @@ import numpy as np
 import polars as pl
 import torch
 from matplotlib import pyplot as plt
+from matplotlib.ticker import MaxNLocator
 from numpy.typing import NDArray
 from sklearn.metrics import precision_score, recall_score, precision_recall_curve
 from torch import nn, optim
@@ -240,6 +241,8 @@ Model Structure
         ax.set_ylabel('Loss')
         ax.set_title('Training Loss Over Epochs')
         ax.set_ylim(bottom=0)
+
+        ax.xaxis.set_major_locator(MaxNLocator('auto', integer=True))
 
         if self._save_logs:
             self._save_plot(fig, 'training_loss')
