@@ -52,8 +52,8 @@ class EvaluationMetricsComputer:
         self._labels_np: NDArray[np.float32] = np.empty(0, dtype=np.float32)
 
     def build_logits_labels_tensors_and_numpy_representations(self) -> None:
-        self._logits = torch.tensor(self._logits_list)
-        self._labels = torch.tensor(self._labels_list)
+        self._logits = torch.cat(self._logits_list, dim=0)
+        self._labels = torch.cat(self._labels_list, dim=0)
 
         self._probabilities = self._logits.cpu().numpy()
         self._labels_np = self._labels.cpu().numpy()
