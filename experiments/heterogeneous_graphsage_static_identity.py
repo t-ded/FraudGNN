@@ -1,10 +1,11 @@
 import json
 from pathlib import Path
 
+from src.models.heterogeneous_graphsage import HeteroGraphSAGE
+
 from src.data_loading.graph_builder import GraphDatasetDefinition
 from src.data_loading.tabular_dataset import TabularDatasetDefinition, TrainValTestRatios
 from src.evaluation.evaluator import Evaluator, GNNHyperparameters
-from src.models.heterogeneous_graphsage import HeteroGraphSAGE
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 CONFIG_PATH = ROOT_DIR / 'config/general_config.json'
@@ -54,7 +55,7 @@ if __name__ == '__main__':
         save_logs=True,
     )
 
-    evaluator.train(20, plot_loss=True)
+    evaluator.train(10, plot_loss=True)
     validation_results = evaluator.stream_evaluate('validation', compute_metrics=True, plot_pr_curve=True)
     validation_results.print_summary(loss_func=evaluator.criterion)
     test_results = evaluator.stream_evaluate('testing', compute_metrics=True, plot_pr_curve=True)
