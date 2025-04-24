@@ -20,8 +20,8 @@ class TrainTestSplit(NamedTuple):
 
 @dataclass(frozen=True, kw_only=True)
 class TrainTestSplitSettings:
-    from_date: pl.Date
-    to_date: pl.Date
+    from_date: pl.Expr | date
+    to_date: pl.Expr | date
     label_safety_gap_days: int
     eval_set_len_days: int
 

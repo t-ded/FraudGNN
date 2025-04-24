@@ -15,7 +15,7 @@ class AssociatedFeatureDefinition:
     source_feature: str
     feature_type: ASSOCIATED_FEATURE_TYPES
     fill_value: float | str
-    preprocessing_steps: Optional[PREPROCESSING_OPTIONS]
+    preprocessing_steps: Optional[list[PREPROCESSING_OPTIONS]]
 
     # TODO: Ensure fill value and preprocessing steps correspond to feature type
     def __post_init__(self) -> None:
@@ -25,7 +25,9 @@ class AssociatedFeatureDefinition:
 @dataclass(frozen=True, kw_only=True)
 class NodeValidityConditions:
     all_not_null: bool
+    max_n_txs: Optional[int] = None
     min_n_unique_cids: Optional[int] = None
+    max_n_unique_cids: Optional[int] = None
     min_length: Optional[list[Optional[int]]] = None
 
 
