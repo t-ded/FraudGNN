@@ -1,6 +1,21 @@
 from dataclasses import dataclass
+from datetime import date
+from typing import Literal, NamedTuple
 
 import polars as pl
+
+
+class TrainTestSplit(NamedTuple):
+    from_date: date
+
+    to_date_train_during_hyperparam_opt: date
+    to_date_train_during_full: date
+
+    from_date_validation: date
+    to_date_validation: date
+
+    from_date_test: date
+    to_date_test: date
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -19,7 +34,8 @@ class GNNTrainingHyperparameters:
     num_train_epochs: int
     positive_class_weight: float
     sampler_fanouts: list[int]
+    temporal_strategy: Literal['uniform', 'last']
     smoothing: float
-    grad_norm_clipping: float
+    grad_clip_max_norm: float
     warmup_epochs: int
-    train_test_split_settings: TrainTestSplitSettings
+    weight_decay: float

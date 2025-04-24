@@ -55,7 +55,7 @@ class AuxiliaryNodeDefinition(NodeDefinition):
 
 class MonoPartiteEdgeType(NamedTuple):
     primary_ntype: NodeType
-    auxiliary_ntype: NodeType | list[NodeType]
+    auxiliary_ntype: NodeType
     edge_description: EdgeDescription
 
 
